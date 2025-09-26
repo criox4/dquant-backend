@@ -130,7 +130,7 @@ export async function getRedisHealth(): Promise<{
     const responseTime = Date.now() - startTime;
 
     redisLogger.debug('Redis health check completed', {
-      responseTime: `${responseTime}ms`,
+      responseTime,
       status: 'healthy'
     });
 
@@ -147,7 +147,7 @@ export async function getRedisHealth(): Promise<{
     const errorMessage = (error as Error).message;
 
     redisLogger.warn('Redis health check failed', {
-      responseTime: `${responseTime}ms`,
+      responseTime,
       error: errorMessage,
       status: 'unhealthy'
     });
@@ -263,8 +263,13 @@ export class CacheService {
   }
 }
 
-// Create cache service instance
-export const cacheService = new CacheService(redisClient);
+// Create cache service instance getter
+export function getCacheService(): CacheService {
+  if (!redisClient) {
+    throw new Error('Redis client not initialized. Call setupRedis() first.');
+  }
+  return new CacheService(redisClient);
+}
 
 // Export Redis client and setup function
 export { redisClient };

@@ -87,7 +87,7 @@ export async function createApp(): Promise<FastifyInstance> {
           }
         }
       }
-    }, async (request, reply) => {
+    }, async (_request, reply) => {
       try {
         // Check database connection
         const dbCheck = await app.prisma.$queryRaw`SELECT 1`;
@@ -116,7 +116,7 @@ export async function createApp(): Promise<FastifyInstance> {
           data: healthData
         });
       } catch (error) {
-        logger.error('Health check failed:', error);
+        logger.error('Health check failed:', error as Error);
         await reply.status(503).send({
           success: false,
           error: 'Service unavailable',
@@ -145,7 +145,7 @@ export async function createApp(): Promise<FastifyInstance> {
           logger.info('Application shut down complete');
           process.exit(0);
         } catch (error) {
-          logger.error('Error during shutdown:', error);
+          logger.error('Error during shutdown:', error as Error);
           process.exit(1);
         }
       });
@@ -155,7 +155,7 @@ export async function createApp(): Promise<FastifyInstance> {
     return app;
 
   } catch (error) {
-    logger.error('Failed to create application:', error);
+    logger.error('Failed to create application:', error as Error);
     throw error;
   }
 }

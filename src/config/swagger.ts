@@ -238,14 +238,14 @@ export async function setupSwagger(app: FastifyInstance): Promise<void> {
       tryItOutEnabled: true
     },
     uiHooks: {
-      onRequest: function (request, reply, next) {
+      onRequest: function (_request, _reply, next) {
         // Add custom headers or authentication if needed
         next();
       }
     },
     staticCSP: true,
     transformStaticCSP: (header) => header,
-    transformSpecification: (swaggerObject, request, reply) => {
+    transformSpecification: (swaggerObject, _request, _reply) => {
       // Transform the specification if needed
       return swaggerObject;
     },

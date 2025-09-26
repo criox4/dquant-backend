@@ -3,13 +3,10 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   StrategyData,
   StrategyStatus,
-  BacktestResult,
-  StrategyTemplate,
   StrategySearchRequest,
   StrategyStats,
   StrategyPerformanceMetrics,
   StrategyRiskMetrics,
-  StrategyMetadata,
   DSLStrategy
 } from '@/types/strategy';
 import { databaseLogger } from '@/services/logger';
@@ -31,21 +28,22 @@ export class StrategyDataService {
     timeframe: string,
     dsl: DSLStrategy,
     generatedCode?: string,
-    tags: string[] = [],
-    isTemplate: boolean = false
+    _tags: string[] = [],
+    _isTemplate: boolean = false
   ): Promise<StrategyData> {
     const strategyId = uuidv4();
 
     try {
-      const metadata: StrategyMetadata = {
-        createdBy: generatedCode ? 'AI' : 'USER',
-        backtestCount: 0,
-        liveTradeCount: 0,
-        lastModifiedAt: new Date(),
-        complexity: this.determineComplexity(dsl),
-        marketConditions: [],
-        categories: this.extractCategories(dsl, tags)
-      };
+      // Prepare strategy metadata (unused for now)
+      // const _metadata: StrategyMetadata = {
+      //   createdBy: generatedCode ? 'AI' : 'USER',
+      //   backtestCount: 0,
+      //   liveTradeCount: 0,
+      //   lastModifiedAt: new Date(),
+      //   complexity: this.determineComplexity(dsl),
+      //   marketConditions: [],
+      //   categories: this.extractCategories(dsl, tags)
+      // };
 
       // Map DSL to schema fields
       const strategyData = {
@@ -62,11 +60,7 @@ export class StrategyDataService {
         entryRules: JSON.stringify(dsl.entry || []),
         exitRules: JSON.stringify(dsl.exit || []),
         riskManagement: JSON.stringify(dsl.risk || {}),
-        user: {
-          connect: {
-            userId: userId
-          }
-        }
+        userId: userId
       };
 
       const strategy = await this.db.strategy.create({
@@ -80,7 +74,7 @@ export class StrategyDataService {
         symbol,
         timeframe,
         hasCode: !!generatedCode,
-        isTemplate
+        isTemplate: _isTemplate
       });
 
       return this.mapStrategyData(strategy);
@@ -104,7 +98,7 @@ export class StrategyDataService {
       const strategy = await this.db.strategy.findUnique({
         where: { strategyId },
         include: {
-          backtestResults: {
+          backtests: {
             orderBy: { createdAt: 'desc' },
             take: 1
           }
@@ -157,25 +151,9 @@ export class StrategyDataService {
         updateData.version = { increment: 1 };
       }
 
-      // Update metadata
-      if (updates.performanceMetrics || updates.riskMetrics) {
-        const currentStrategy = await this.db.strategy.findUnique({
-          where: { strategyId }
-        });
-
-        if (currentStrategy) {
-          const metadata = JSON.parse(currentStrategy.metadata as string) as StrategyMetadata;
-          metadata.lastModifiedAt = new Date();
-
-          if (updates.performanceMetrics) {
-            updateData.performanceMetrics = JSON.stringify(updates.performanceMetrics);
-          }
-          if (updates.riskMetrics) {
-            updateData.riskMetrics = JSON.stringify(updates.riskMetrics);
-          }
-
-          updateData.metadata = JSON.stringify(metadata);
-        }
+      // Update performance data if provided
+      if (updates.performanceMetrics) {
+        updateData.performance = JSON.stringify(updates.performanceMetrics);
       }
 
       const strategy = await this.db.strategy.update({
@@ -247,7 +225,7 @@ export class StrategyDataService {
 
       // Symbol filter
       if (request.symbols && request.symbols.length > 0) {
-        where.symbol = { in: request.symbols };
+        where.asset = { in: request.symbols };
       }
 
       // Timeframe filter
@@ -300,7 +278,7 @@ export class StrategyDataService {
         skip: request.offset,
         take: request.limit,
         include: {
-          backtestResults: {
+          backtests: {
             orderBy: { createdAt: 'desc' },
             take: 1
           }
@@ -358,7 +336,7 @@ export class StrategyDataService {
         orderBy: { updatedAt: 'desc' },
         take: limit,
         include: {
-          backtestResults: {
+          backtests: {
             orderBy: { createdAt: 'desc' },
             take: 1
           }
@@ -390,26 +368,25 @@ export class StrategyDataService {
         throw new Error('Original strategy not found');
       }
 
-      const cloneData = {
-        ...original,
+      const cloneData: any = {
         strategyId: uuidv4(),
         userId,
         name: newName || `${original.name} (Copy)`,
         status: 'DRAFT' as StrategyStatus,
-        version: 1,
+        version: '1.0',
+        asset: original.asset,
+        timeframe: original.timeframe,
+        indicators: original.indicators,
+        parameters: original.parameters,
+        entryRules: original.entryRules,
+        exitRules: original.exitRules,
+        riskManagement: original.riskManagement,
+        code: original.code,
+        description: original.description,
         createdAt: new Date(),
         updatedAt: new Date(),
-        performanceMetrics: null,
-        riskMetrics: null
+        performance: null
       };
-
-      // Update metadata
-      const metadata = JSON.parse(original.metadata as string) as StrategyMetadata;
-      metadata.createdBy = 'USER';
-      metadata.backtestCount = 0;
-      metadata.liveTradeCount = 0;
-      metadata.lastModifiedAt = new Date();
-      cloneData.metadata = JSON.stringify(metadata);
 
       delete (cloneData as any).id; // Remove auto-increment ID
 
@@ -467,9 +444,9 @@ export class StrategyDataService {
           _count: true
         }),
 
-        // By symbol
+        // By asset (symbol)
         this.db.strategy.groupBy({
-          by: ['symbol'],
+          by: ['asset'],
           where,
           _count: true
         }),
@@ -480,7 +457,7 @@ export class StrategyDataService {
           orderBy: { updatedAt: 'desc' },
           take: 5,
           include: {
-            backtestResults: {
+            backtests: {
               orderBy: { createdAt: 'desc' },
               take: 1
             }
@@ -493,7 +470,7 @@ export class StrategyDataService {
           orderBy: { createdAt: 'desc' },
           take: 5,
           include: {
-            backtestResults: {
+            backtests: {
               orderBy: { createdAt: 'desc' },
               take: 1
             }
@@ -512,8 +489,8 @@ export class StrategyDataService {
         return acc;
       }, {} as Record<string, number>);
 
-      const strategiesBySymbol = bySymbol.reduce((acc, item) => {
-        acc[item.symbol] = item._count;
+      const strategiesByAsset = bySymbol.reduce((acc, item) => {
+        acc[item.asset] = item._count;
         return acc;
       }, {} as Record<string, number>);
 
@@ -529,7 +506,7 @@ export class StrategyDataService {
         totalBacktests: 0, // Would be calculated from backtest results
         strategiesByStatus,
         strategiesByTimeframe,
-        strategiesBySymbol,
+        strategiesBySymbol: strategiesByAsset,
         topPerformingStrategies: topPerforming.map(s => this.mapStrategyData(s)),
         recentStrategies: recent.map(s => this.mapStrategyData(s))
       };
@@ -546,36 +523,16 @@ export class StrategyDataService {
   async updateStrategyPerformance(
     strategyId: string,
     performanceMetrics: StrategyPerformanceMetrics,
-    riskMetrics: StrategyRiskMetrics
+    _riskMetrics: StrategyRiskMetrics
   ): Promise<void> {
     try {
       await this.db.strategy.update({
         where: { strategyId },
         data: {
-          performanceMetrics: JSON.stringify(performanceMetrics),
-          riskMetrics: JSON.stringify(riskMetrics),
+          performance: JSON.stringify(performanceMetrics),
           updatedAt: new Date()
         }
       });
-
-      // Update metadata backtest count
-      const strategy = await this.db.strategy.findUnique({
-        where: { strategyId }
-      });
-
-      if (strategy) {
-        const metadata = JSON.parse(strategy.metadata as string) as StrategyMetadata;
-        metadata.backtestCount += 1;
-        metadata.lastBacktestAt = new Date();
-        metadata.lastModifiedAt = new Date();
-
-        await this.db.strategy.update({
-          where: { strategyId },
-          data: {
-            metadata: JSON.stringify(metadata)
-          }
-        });
-      }
 
       databaseLogger.debug('Strategy performance updated', {
         strategyId,
@@ -596,103 +553,119 @@ export class StrategyDataService {
    * Map database strategy to StrategyData type
    */
   private mapStrategyData(strategy: any): StrategyData {
-    const metadata = strategy.metadata ? JSON.parse(strategy.metadata) : {};
-    const performanceMetrics = strategy.performanceMetrics ? JSON.parse(strategy.performanceMetrics) : undefined;
-    const riskMetrics = strategy.riskMetrics ? JSON.parse(strategy.riskMetrics) : undefined;
-    const dsl = strategy.dsl ? JSON.parse(strategy.dsl) : {};
+    const performanceMetrics = strategy.performance ? JSON.parse(strategy.performance) : undefined;
+    const indicators = strategy.indicators ? JSON.parse(strategy.indicators) : [];
+    const parameters = strategy.parameters ? JSON.parse(strategy.parameters) : {};
+    const entryRules = strategy.entryRules ? JSON.parse(strategy.entryRules) : [];
+    const exitRules = strategy.exitRules ? JSON.parse(strategy.exitRules) : [];
+    const riskManagement = strategy.riskManagement ? JSON.parse(strategy.riskManagement) : {};
+
+    const dsl = {
+      strategy_name: strategy.name,
+      symbol: strategy.asset,
+      timeframe: strategy.timeframe,
+      indicators,
+      params: parameters,
+      entry: entryRules,
+      exit: exitRules,
+      risk: riskManagement
+    };
 
     return {
       strategyId: strategy.strategyId,
       userId: strategy.userId,
       name: strategy.name,
       description: strategy.description,
-      symbol: strategy.symbol,
+      symbol: strategy.asset,
       timeframe: strategy.timeframe,
       status: strategy.status as StrategyStatus,
       dsl,
-      generatedCode: strategy.generatedCode,
+      generatedCode: strategy.code,
       version: strategy.version,
-      tags: strategy.tags || [],
-      isTemplate: strategy.isTemplate || false,
+      tags: [],
+      isTemplate: false,
       performanceMetrics,
-      riskMetrics,
+      riskMetrics: undefined,
       metadata: {
-        createdBy: metadata.createdBy || 'USER',
-        aiModel: metadata.aiModel,
-        backtestCount: metadata.backtestCount || 0,
-        liveTradeCount: metadata.liveTradeCount || 0,
-        lastBacktestAt: metadata.lastBacktestAt ? new Date(metadata.lastBacktestAt) : undefined,
-        lastModifiedAt: new Date(metadata.lastModifiedAt || strategy.updatedAt),
-        complexity: metadata.complexity || 'SIMPLE',
-        marketConditions: metadata.marketConditions || [],
-        categories: metadata.categories || []
+        createdBy: 'USER',
+        aiModel: undefined,
+        backtestCount: 0,
+        liveTradeCount: 0,
+        lastBacktestAt: undefined,
+        lastModifiedAt: strategy.updatedAt,
+        complexity: 'SIMPLE',
+        marketConditions: [],
+        categories: []
       },
       createdAt: strategy.createdAt,
       updatedAt: strategy.updatedAt
     };
   }
 
-  /**
-   * Determine strategy complexity based on DSL
-   */
-  private determineComplexity(dsl: DSLStrategy): 'SIMPLE' | 'INTERMEDIATE' | 'ADVANCED' {
-    let complexity = 0;
+  // Commented out unused methods to avoid TypeScript warnings
+  // These would be used when metadata feature is implemented
 
-    complexity += dsl.indicators.length;
-    complexity += dsl.entry.length;
-    complexity += dsl.exit.length;
+  // /**
+  //  * Determine strategy complexity based on DSL
+  //  */
+  // private _determineComplexity(dsl: DSLStrategy): 'SIMPLE' | 'INTERMEDIATE' | 'ADVANCED' {
+  //   let complexity = 0;
 
-    // Check for advanced indicators
-    const advancedIndicators = ['ICHIMOKU', 'MACD', 'KDJ', 'DMI'];
-    if (dsl.indicators.some(ind => advancedIndicators.includes(ind.name))) {
-      complexity += 2;
-    }
+  //   complexity += dsl.indicators.length;
+  //   complexity += dsl.entry.length;
+  //   complexity += dsl.exit.length;
 
-    // Check for complex operators
-    const complexOperators = ['crosses_above', 'crosses_below', 'touches', 'breaks_above', 'breaks_below'];
-    if (dsl.entry.some(cond => complexOperators.includes(cond.op)) ||
-        dsl.exit.some(cond => complexOperators.includes(cond.op))) {
-      complexity += 1;
-    }
+  //   // Check for advanced indicators
+  //   const advancedIndicators = ['ICHIMOKU', 'MACD', 'KDJ', 'DMI'];
+  //   if (dsl.indicators.some(ind => advancedIndicators.includes(ind.name))) {
+  //     complexity += 2;
+  //   }
 
-    if (complexity <= 3) return 'SIMPLE';
-    if (complexity <= 6) return 'INTERMEDIATE';
-    return 'ADVANCED';
-  }
+  //   // Check for complex operators
+  //   const complexOperators = ['crosses_above', 'crosses_below', 'touches', 'breaks_above', 'breaks_below'];
+  //   if (dsl.entry.some(cond => complexOperators.includes(cond.op)) ||
+  //       dsl.exit.some(cond => complexOperators.includes(cond.op))) {
+  //     complexity += 1;
+  //   }
 
-  /**
-   * Extract categories from DSL and tags
-   */
-  private extractCategories(dsl: DSLStrategy, tags: string[]): string[] {
-    const categories = new Set<string>();
+  //   if (complexity <= 3) return 'SIMPLE';
+  //   if (complexity <= 6) return 'INTERMEDIATE';
+  //   return 'ADVANCED';
+  // }
 
-    // Add categories based on indicators
-    if (dsl.indicators.some(ind => ['RSI', 'STOCH', 'WR', 'MFI'].includes(ind.name))) {
-      categories.add('Momentum');
-    }
-    if (dsl.indicators.some(ind => ['SMA', 'EMA', 'VWAP'].includes(ind.name))) {
-      categories.add('Trend Following');
-    }
-    if (dsl.indicators.some(ind => ['BB', 'ATR'].includes(ind.name))) {
-      categories.add('Volatility');
-    }
-    if (dsl.indicators.some(ind => ['VOLUME', 'OBV'].includes(ind.name))) {
-      categories.add('Volume');
-    }
+  // /**
+  //  * Extract categories from DSL and tags
+  //  */
+  // private _extractCategories(dsl: DSLStrategy, tags: string[]): string[] {
+  //   const categories = new Set<string>();
 
-    // Add categories from tags
-    tags.forEach(tag => {
-      const lowerTag = tag.toLowerCase();
-      if (['scalping', 'day trading', 'swing'].some(t => lowerTag.includes(t))) {
-        categories.add('Trading Style');
-      }
-      if (['bullish', 'bearish', 'reversal'].some(t => lowerTag.includes(t))) {
-        categories.add('Market Direction');
-      }
-    });
+  //   // Add categories based on indicators
+  //   if (dsl.indicators.some(ind => ['RSI', 'STOCH', 'WR', 'MFI'].includes(ind.name))) {
+  //     categories.add('Momentum');
+  //   }
+  //   if (dsl.indicators.some(ind => ['SMA', 'EMA', 'VWAP'].includes(ind.name))) {
+  //     categories.add('Trend Following');
+  //   }
+  //   if (dsl.indicators.some(ind => ['BB', 'ATR'].includes(ind.name))) {
+  //     categories.add('Volatility');
+  //   }
+  //   if (dsl.indicators.some(ind => ['VOLUME', 'OBV'].includes(ind.name))) {
+  //     categories.add('Volume');
+  //   }
 
-    return Array.from(categories);
-  }
+  //   // Add categories from tags
+  //   tags.forEach(tag => {
+  //     const lowerTag = tag.toLowerCase();
+  //     if (['scalping', 'day trading', 'swing'].some(t => lowerTag.includes(t))) {
+  //       categories.add('Trading Style');
+  //     }
+  //     if (['bullish', 'bearish', 'reversal'].some(t => lowerTag.includes(t))) {
+  //       categories.add('Market Direction');
+  //     }
+  //   });
+
+  //   return Array.from(categories);
+  // }
 }
 
 // Singleton instance

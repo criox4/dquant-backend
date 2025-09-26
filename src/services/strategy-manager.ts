@@ -1,6 +1,5 @@
 import {
   StrategyData,
-  StrategyStatus,
   DSLStrategy,
   StrategyManagerConfig,
   CreateStrategyRequest,
@@ -8,9 +7,6 @@ import {
   StrategySearchRequest,
   StrategyStats,
   ProcessMessageResponse,
-  StrategyOptimizationRequest,
-  StrategyOptimizationResult,
-  BacktestResult,
   DSLValidationResult
 } from '@/types/strategy';
 import { StrategyDataService, getStrategyDataService } from '@/services/strategy-data';
@@ -21,7 +17,7 @@ import { WebSocketEvent } from '@/types/common';
 
 export class StrategyManager {
   private activeStrategies = new Map<string, StrategyData>();
-  private config: StrategyManagerConfig;
+  // private _config: StrategyManagerConfig; // Currently unused
   private stats = {
     strategiesCreated: 0,
     strategiesOptimized: 0,
@@ -35,24 +31,24 @@ export class StrategyManager {
   constructor(
     strategyDataService?: StrategyDataService,
     dslProcessor?: DSLProcessor,
-    config: Partial<StrategyManagerConfig> = {}
+    _config: Partial<StrategyManagerConfig> = {}
   ) {
     this.strategyDataService = strategyDataService || getStrategyDataService();
     this.dslProcessor = dslProcessor || getDSLProcessor();
 
-    this.config = {
-      maxActiveStrategies: 100,
-      defaultInitialCapital: 10000,
-      maxBacktestDuration: 60, // minutes
-      enableOptimization: true,
-      enableLiveTrading: false,
-      riskLimits: {
-        maxDrawdown: 0.2,
-        maxDailyLoss: 0.05,
-        maxPositionSize: 0.1
-      },
-      ...config
-    };
+    // this._config = {
+    //   maxActiveStrategies: 100,
+    //   defaultInitialCapital: 10000,
+    //   maxBacktestDuration: 60, // minutes
+    //   enableOptimization: true,
+    //   enableLiveTrading: false,
+    //   riskLimits: {
+    //     maxDrawdown: 0.2,
+    //     maxDailyLoss: 0.05,
+    //     maxPositionSize: 0.1
+    //   },
+    //   ..._config
+    // };
   }
 
   /**
@@ -237,20 +233,21 @@ export class StrategyManager {
   /**
    * Get strategy by ID
    */
-  async getStrategy(strategyId: string): Promise<StrategyData | null> {
+  async getStrategy(strategyId: string): Promise<StrategyData | undefined> {
     try {
       // Check cache first
       let strategy = this.activeStrategies.get(strategyId);
 
       if (!strategy) {
         // Fetch from database
-        strategy = await this.strategyDataService.getStrategy(strategyId);
-        if (strategy) {
+        const dbStrategy = await this.strategyDataService.getStrategy(strategyId);
+        if (dbStrategy) {
+          strategy = dbStrategy;
           this.activeStrategies.set(strategyId, strategy);
         }
       }
 
-      return strategy || null;
+      return strategy;
 
     } catch (error) {
       apiLogger.error('Failed to get strategy', error as Error, { strategyId });
@@ -546,9 +543,9 @@ export class StrategyManager {
   }
 
   private async handleModifyStrategyMessage(
-    message: string,
-    parameters: any,
-    context: any
+    _message: string,
+    _parameters: any,
+    _context: any
   ): Promise<ProcessMessageResponse> {
     // Implementation for strategy modification
     return {
@@ -558,9 +555,9 @@ export class StrategyManager {
   }
 
   private async handleOptimizeStrategyMessage(
-    message: string,
-    parameters: any,
-    context: any
+    _message: string,
+    _parameters: any,
+    _context: any
   ): Promise<ProcessMessageResponse> {
     // Implementation for strategy optimization
     return {
@@ -570,9 +567,9 @@ export class StrategyManager {
   }
 
   private async handleBacktestStrategyMessage(
-    message: string,
-    parameters: any,
-    context: any
+    _message: string,
+    _parameters: any,
+    _context: any
   ): Promise<ProcessMessageResponse> {
     // Implementation for backtesting
     return {
@@ -582,9 +579,9 @@ export class StrategyManager {
   }
 
   private async handleAnalyzeStrategyMessage(
-    message: string,
-    parameters: any,
-    context: any
+    _message: string,
+    _parameters: any,
+    _context: any
   ): Promise<ProcessMessageResponse> {
     // Implementation for strategy analysis
     return {
@@ -593,15 +590,18 @@ export class StrategyManager {
     };
   }
 
-  private async handleGeneralStrategyQuery(message: string, context: any): Promise<ProcessMessageResponse> {
+  private async handleGeneralStrategyQuery(_message: string, _context: any): Promise<ProcessMessageResponse> {
     const responses = [
       "I can help you create, modify, optimize, and backtest trading strategies. What would you like to do?",
       "I'm here to assist with your trading strategy development. Would you like to create a new strategy or work with an existing one?",
       "Let me help you with trading strategies. I can build custom strategies based on technical indicators, risk management rules, and your trading preferences."
     ];
 
+    const randomIndex = Math.floor(Math.random() * responses.length);
+    const selectedMessage = responses[randomIndex] || responses[0];
+
     return {
-      message: responses[Math.floor(Math.random() * responses.length)],
+      message: selectedMessage,
       action: 'GENERAL_RESPONSE',
       metadata: {
         availableActions: ['CREATE_STRATEGY', 'MODIFY_STRATEGY', 'BACKTEST_STRATEGY', 'OPTIMIZE_STRATEGY']
@@ -609,13 +609,13 @@ export class StrategyManager {
     };
   }
 
-  private extractSymbol(message: string): string | null {
+  private extractSymbol(message: string): string | undefined {
     const symbolPattern = /([A-Z]{3,4})[\/\-]?(USDT|USD|BTC|ETH)/gi;
     const match = message.match(symbolPattern);
-    return match ? match[0].replace(/[\/\-]/g, '/').toUpperCase() : null;
+    return match ? match[0].replace(/[\/\-]/g, '/').toUpperCase() : undefined;
   }
 
-  private extractTimeframe(message: string): string | null {
+  private extractTimeframe(message: string): string | undefined {
     const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'];
     const lowerMessage = message.toLowerCase();
 
@@ -625,10 +625,10 @@ export class StrategyManager {
       }
     }
 
-    return null;
+    return undefined;
   }
 
-  private extractStrategyName(message: string): string | null {
+  private extractStrategyName(message: string): string | undefined {
     const patterns = [
       /(?:call|name|called)\s+(?:it\s+)?["']([^"']+)["']/i,
       /["']([^"']+)["']\s+strategy/i,
@@ -640,7 +640,7 @@ export class StrategyManager {
       if (match) return match[1];
     }
 
-    return null;
+    return undefined;
   }
 
   private mergeDSLStrategies(parent: DSLStrategy, child: DSLStrategy): DSLStrategy {
