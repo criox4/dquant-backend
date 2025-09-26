@@ -219,6 +219,14 @@ export async function getDatabaseMetrics(): Promise<{
   }
 }
 
+// Getter function to access initialized prisma client
+export function getPrismaClient(): PrismaClient {
+  if (!prisma) {
+    throw new Error('Database not initialized. Call setupDatabase() first.');
+  }
+  return prisma;
+}
+
 // Export the setup function and utilities
 export { prisma };
 export default setupDatabase;

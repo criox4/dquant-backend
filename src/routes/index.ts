@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { apiLogger } from '@/services/logger';
+import conversationsRoutes from '@/routes/conversations';
 
 export async function setupRoutes(app: FastifyInstance): Promise<void> {
   try {
@@ -7,8 +8,10 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
 
     // API prefix
     await app.register(async function apiRoutes(app) {
-      // TODO: Register route modules
-      // await app.register(conversationRoutes, { prefix: '/conversations' });
+      // Register conversation routes
+      await app.register(conversationsRoutes);
+
+      // TODO: Register remaining route modules
       // await app.register(strategyRoutes, { prefix: '/strategies' });
       // await app.register(backtestRoutes, { prefix: '/backtest' });
       // await app.register(paperTradingRoutes, { prefix: '/paper' });
