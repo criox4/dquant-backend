@@ -1,0 +1,697 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============= Conversation Management Tables =============
+
+// Conversation model (similar to OpenAI conversations)
+model Conversation {
+  id              Int       @id @default(autoincrement())
+  conversationId  String    @unique @map("conversation_id")
+  userId          String    @map("user_id")
+  title           String?   // Auto-generated conversation title
+  summary         String?   @db.Text // Conversation summary
+  lastMessageAt   DateTime  @default(now()) @map("last_message_at")
+  totalTokens     Int       @default(0) @map("total_tokens")
+  status          ConversationStatus @default(ACTIVE)
+  metadata        Json      @default("{}") // Additional metadata
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  messages        Message[]
+  snapshots       ConversationSnapshot[]
+  strategies      Strategy[]
+  
+  user            User?     @relation(fields: [userId], references: [userId])
+  
+  @@index([userId])
+  @@index([status])
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+// Message model
+model Message {
+  id              Int       @id @default(autoincrement())
+  messageId       String    @unique @map("message_id")
+  conversationId  String    @map("conversation_id")
+  role            MessageRole
+  content         String    @db.Text
+  tokenCount      Int       @default(0) @map("token_count")
+  metadata        Json?     // Contains structured data like strategies, backtest results
+  isCompressed    Boolean   @default(false) @map("is_compressed")
+  originalId      String?   @map("original_id") // Original message ID before compression
+  createdAt       DateTime  @default(now()) @map("created_at")
+  
+  conversation    Conversation @relation(fields: [conversationId], references: [conversationId], onDelete: Cascade)
+  
+  @@index([conversationId])
+  @@index([role])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+// Conversation snapshot (for memory compression in long conversations)
+model ConversationSnapshot {
+  id              Int       @id @default(autoincrement())
+  snapshotId      String    @unique @map("snapshot_id")
+  conversationId  String    @map("conversation_id")
+  summary         String    @db.Text // Compressed conversation summary
+  keyPoints       Json      // Key decision points
+  strategies      Json      // Generated strategy list
+  messageCount    Int       @map("message_count") // Number of compressed messages
+  tokensSaved     Int       @map("tokens_saved") // Number of tokens saved
+  createdAt       DateTime  @default(now()) @map("created_at")
+  
+  conversation    Conversation @relation(fields: [conversationId], references: [conversationId], onDelete: Cascade)
+  
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("conversation_snapshots")
+}
+
+// ============= Original Tables (with updated relations) =============
+
+// Strategy model
+model Strategy {
+  id              Int       @id @default(autoincrement())
+  strategyId      String    @unique @map("strategy_id")
+  userId          String    @map("user_id")
+  conversationId  String?   @map("conversation_id") // Related to conversation
+  name            String
+  description     String?
+  version         String    @default("v1.0")
+  asset           String    @default("BTC/USDT")
+  timeframe       String    @default("1h")
+  indicators      Json      @default("[]")
+  parameters      Json      @default("{}")
+  entryRules      Json      @default("[]") @map("entry_rules")
+  exitRules       Json      @default("[]") @map("exit_rules")
+  riskManagement  Json      @default("{}") @map("risk_management")
+  code            String?   @db.Text
+  backtestResultsJson Json      @default("[]") @map("backtest_results")
+  performance     Json?
+  status          StrategyStatus @default(DRAFT)
+  savedAt         DateTime? @map("saved_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  conversation    Conversation? @relation(fields: [conversationId], references: [conversationId])
+  trades          Trade[]
+  user            User?     @relation(fields: [userId], references: [userId])
+  backtests       BacktestResult[]
+  paperPositions  PaperPosition[]
+  paperOrders     PaperOrder[]
+  runningStrategies RunningStrategy[]
+  
+  @@index([userId])
+  @@index([conversationId])
+  @@index([status])
+  @@index([asset])
+  @@map("strategies")
+}
+
+// Trade record model
+model Trade {
+  id              Int       @id @default(autoincrement())
+  tradeId         String    @unique @map("trade_id")
+  strategyId      String    @map("strategy_id")
+  userId          String    @map("user_id")
+  symbol          String
+  type            TradeType
+  side            TradeSide @default(LONG)
+  price           Decimal   @db.Decimal(20, 8)
+  quantity        Decimal   @db.Decimal(20, 8)
+  value           Decimal   @db.Decimal(20, 8)
+  commission      Decimal   @default(0) @db.Decimal(20, 8)
+  slippage        Decimal   @default(0) @db.Decimal(20, 8)
+  pnl             Decimal?  @db.Decimal(20, 8)
+  pnlPercent      Decimal?  @map("pnl_percent") @db.Decimal(10, 4)
+  reason          String?
+  signal          Json      @default("{}")
+  executionTime   DateTime  @default(now()) @map("execution_time")
+  isBacktest      Boolean   @default(false) @map("is_backtest")
+  exchangeOrderId String?   @map("exchange_order_id")
+  status          TradeStatus @default(EXECUTED)
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  strategy        Strategy  @relation(fields: [strategyId], references: [strategyId])
+  user            User?     @relation(fields: [userId], references: [userId])
+  
+  @@index([userId])
+  @@index([strategyId])
+  @@index([symbol])
+  @@index([type])
+  @@index([executionTime])
+  @@index([isBacktest])
+  @@map("trades")
+}
+
+// Backtest Result model
+model BacktestResult {
+  id                Int       @id @default(autoincrement())
+  backtestId        String    @unique @map("backtest_id")
+  strategyId        String    @map("strategy_id")
+  userId            String    @map("user_id")
+  
+  // Test Parameters
+  startDate         DateTime  @map("start_date")
+  endDate           DateTime  @map("end_date")
+  symbol            String
+  timeframe         String
+  initialCapital    Decimal   @db.Decimal(20, 8) @map("initial_capital")
+  commission        Decimal   @db.Decimal(10, 4)
+  slippage          Decimal   @db.Decimal(10, 4)
+  
+  // Results
+  finalEquity       Decimal   @db.Decimal(20, 8) @map("final_equity")
+  totalReturn       Decimal   @db.Decimal(10, 4) @map("total_return")
+  annualizedReturn  Decimal?  @db.Decimal(10, 4) @map("annualized_return")
+  sharpeRatio       Decimal?  @db.Decimal(10, 4) @map("sharpe_ratio")
+  maxDrawdown       Decimal   @db.Decimal(10, 4) @map("max_drawdown")
+  winRate           Decimal   @db.Decimal(10, 4) @map("win_rate")
+  profitFactor      Decimal?  @db.Decimal(10, 4) @map("profit_factor")
+  totalTrades       Int       @map("total_trades")
+  winningTrades     Int       @map("winning_trades")
+  losingTrades      Int       @map("losing_trades")
+  grossProfit       Decimal?  @db.Decimal(20, 8) @map("gross_profit")
+  grossLoss         Decimal?  @db.Decimal(20, 8) @map("gross_loss")
+  averageWin        Decimal?  @db.Decimal(10, 4) @map("average_win")
+  averageLoss       Decimal?  @db.Decimal(10, 4) @map("average_loss")
+  
+  // Detailed Data
+  trades            Json      // Array of trade details
+  equityCurve       Json      @map("equity_curve") // Time series data
+  drawdownCurve     Json?     @map("drawdown_curve")
+  metrics           Json?     // Additional metrics
+  
+  status            BacktestStatus @default(COMPLETED)
+  executionTime     Int?      @map("execution_time") // milliseconds
+  error             String?   @db.Text
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  
+  strategy          Strategy  @relation(fields: [strategyId], references: [strategyId])
+  user              User?     @relation(fields: [userId], references: [userId])
+  
+  @@index([strategyId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("backtest_results")
+}
+
+// User model
+model User {
+  id              Int       @id @default(autoincrement())
+  userId          String    @unique @map("user_id")
+  email           String?   @unique
+  username        String?   @unique
+  apiKeys         Json?     @map("api_keys")
+  settings        Json      @default("{}")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  conversations       Conversation[]
+  strategies          Strategy[]
+  trades              Trade[]
+  backtestResults     BacktestResult[]
+  paperTradingAccount PaperTradingAccount[]
+  paperPositions      PaperPosition[]
+  paperOrders         PaperOrder[]
+  runningStrategies   RunningStrategy[]
+  liveTradingAccount  LiveTradingAccount[]
+  livePositions       LivePosition[]
+  liveOrders          LiveOrder[]
+  liveStrategies      LiveStrategy[]
+
+  @@map("users")
+}
+
+// ============= Paper Trading Tables =============
+
+// Running strategies for paper trading persistence
+model RunningStrategy {
+  id                String    @id @default(cuid())
+  strategyId        String    @map("strategy_id")
+  userId            String    @map("user_id")
+  accountId         String    @map("account_id")
+  status            String    @default("running") // running, paused, stopped
+  startedAt         DateTime  @default(now()) @map("started_at")
+  pausedAt          DateTime? @map("paused_at")
+  stoppedAt         DateTime? @map("stopped_at")
+  lastExecutedAt    DateTime? @map("last_executed_at")
+  totalTrades       Int       @default(0) @map("total_trades")
+  totalPnl          Decimal   @default(0) @db.Decimal(20, 8) @map("total_pnl")
+  metadata          Json      @default("{}")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  strategy          Strategy  @relation(fields: [strategyId], references: [strategyId])
+  user              User?     @relation(fields: [userId], references: [userId])
+  paperAccount      PaperTradingAccount @relation(fields: [accountId], references: [accountId])
+
+  @@unique([strategyId, userId])
+  @@index([userId])
+  @@index([status])
+  @@map("running_strategies")
+}
+
+// Paper Trading Account - Virtual portfolio for each user
+model PaperTradingAccount {
+  id                Int       @id @default(autoincrement())
+  accountId         String    @unique @map("account_id")
+  userId            String    @map("user_id")
+
+  // Virtual Balance
+  initialBalance    Decimal   @db.Decimal(20, 8) @map("initial_balance")
+  currentBalance    Decimal   @db.Decimal(20, 8) @map("current_balance")
+  availableBalance  Decimal   @db.Decimal(20, 8) @map("available_balance")
+  marginUsed        Decimal   @default(0) @db.Decimal(20, 8) @map("margin_used")
+
+  // Performance Metrics
+  totalPnl          Decimal   @default(0) @db.Decimal(20, 8) @map("total_pnl")
+  totalTrades       Int       @default(0) @map("total_trades")
+  winningTrades     Int       @default(0) @map("winning_trades")
+  losingTrades      Int       @default(0) @map("losing_trades")
+  maxDrawdown       Decimal   @default(0) @db.Decimal(10, 4) @map("max_drawdown")
+  winRate           Decimal   @default(0) @db.Decimal(10, 4) @map("win_rate")
+
+  // Settings
+  tradingMode       TradingMode @default(PAPER) @map("trading_mode")
+  riskSettings      Json      @default("{}") @map("risk_settings")
+  isActive          Boolean   @default(true) @map("is_active")
+
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  resetAt           DateTime? @map("reset_at")
+
+  user              User?     @relation(fields: [userId], references: [userId])
+  positions         PaperPosition[]
+  orders           PaperOrder[]
+  runningStrategies RunningStrategy[]
+
+  @@index([userId])
+  @@index([tradingMode])
+  @@map("paper_trading_accounts")
+}
+
+// Paper Trading Positions - Virtual positions tracking
+model PaperPosition {
+  id                Int       @id @default(autoincrement())
+  positionId        String    @unique @map("position_id")
+  accountId         String    @map("account_id")
+  userId            String    @map("user_id")
+  strategyId        String?   @map("strategy_id")
+
+  symbol            String
+  side              TradeSide
+  size              Decimal   @db.Decimal(20, 8)
+  entryPrice        Decimal   @db.Decimal(20, 8) @map("entry_price")
+  currentPrice      Decimal   @db.Decimal(20, 8) @map("current_price")
+
+  // P&L Tracking
+  unrealizedPnl     Decimal   @default(0) @db.Decimal(20, 8) @map("unrealized_pnl")
+  realizedPnl       Decimal   @default(0) @db.Decimal(20, 8) @map("realized_pnl")
+  totalFees         Decimal   @default(0) @db.Decimal(20, 8) @map("total_fees")
+
+  // Risk Management
+  stopLoss          Decimal?  @db.Decimal(20, 8) @map("stop_loss")
+  takeProfit        Decimal?  @db.Decimal(20, 8) @map("take_profit")
+
+  status            PositionStatus @default(OPEN)
+  openedAt          DateTime  @default(now()) @map("opened_at")
+  closedAt          DateTime? @map("closed_at")
+  metadata          Json      @default("{}")
+
+  account           PaperTradingAccount @relation(fields: [accountId], references: [accountId], onDelete: Cascade)
+  user              User?     @relation(fields: [userId], references: [userId])
+  strategy          Strategy? @relation(fields: [strategyId], references: [strategyId])
+
+  @@index([accountId])
+  @@index([userId])
+  @@index([symbol])
+  @@index([status])
+  @@map("paper_positions")
+}
+
+// Paper Trading Orders - Virtual order management
+model PaperOrder {
+  id                Int       @id @default(autoincrement())
+  orderId           String    @unique @map("order_id")
+  accountId         String    @map("account_id")
+  userId            String    @map("user_id")
+  strategyId        String?   @map("strategy_id")
+
+  symbol            String
+  type              OrderType
+  side              TradeSide
+  amount            Decimal   @db.Decimal(20, 8)
+  price             Decimal?  @db.Decimal(20, 8)
+  stopPrice         Decimal?  @db.Decimal(20, 8) @map("stop_price")
+
+  // Execution Details
+  filled            Decimal   @default(0) @db.Decimal(20, 8)
+  remaining         Decimal   @db.Decimal(20, 8)
+  averagePrice      Decimal?  @db.Decimal(20, 8) @map("average_price")
+  fee               Decimal   @default(0) @db.Decimal(20, 8)
+
+  status            OrderStatus @default(PENDING)
+  placedAt          DateTime  @default(now()) @map("placed_at")
+  executedAt        DateTime? @map("executed_at")
+  cancelledAt       DateTime? @map("cancelled_at")
+
+  // Order Parameters
+  timeInForce       String    @default("GTC") @map("time_in_force")
+  reduceOnly        Boolean   @default(false) @map("reduce_only")
+  metadata          Json      @default("{}")
+
+  account           PaperTradingAccount @relation(fields: [accountId], references: [accountId], onDelete: Cascade)
+  user              User?     @relation(fields: [userId], references: [userId])
+  strategy          Strategy? @relation(fields: [strategyId], references: [strategyId])
+
+  @@index([accountId])
+  @@index([userId])
+  @@index([symbol])
+  @@index([status])
+  @@index([type])
+  @@map("paper_orders")
+}
+
+// ============= Live Trading Tables =============
+
+// Live Trading Strategies - Separate from paper trading
+model LiveStrategy {
+  id                String    @id @default(cuid())
+  strategyId        String    @map("strategy_id")
+  userId            String    @map("user_id")
+  accountId         String    @map("account_id")
+
+  // Strategy Details
+  name              String
+  symbol            String
+  timeframe         String
+  dslConfig         Json      @map("dsl_config")
+  riskConfig        Json      @default("{}") @map("risk_config")
+
+  // Status
+  status            String    @default("stopped") // stopped, running, paused, error
+  isRunning         Boolean   @default(false) @map("is_running")
+  isPaused          Boolean   @default(false) @map("is_paused")
+
+  // Execution Tracking
+  startedAt         DateTime? @map("started_at")
+  pausedAt          DateTime? @map("paused_at")
+  stoppedAt         DateTime? @map("stopped_at")
+  lastExecutedAt    DateTime? @map("last_executed_at")
+  lastSignal        Json?     @map("last_signal")
+
+  // Performance Metrics
+  totalTrades       Int       @default(0) @map("total_trades")
+  totalPnl          Decimal   @default(0) @db.Decimal(20, 8) @map("total_pnl")
+  dailyPnl          Decimal   @default(0) @db.Decimal(20, 8) @map("daily_pnl")
+  dailyTrades       Int       @default(0) @map("daily_trades")
+  maxDrawdown       Decimal   @default(0) @db.Decimal(10, 4) @map("max_drawdown")
+  winRate           Decimal   @default(0) @db.Decimal(10, 4) @map("win_rate")
+
+  // Metadata
+  executionConfig   Json      @default("{}") @map("execution_config")
+  errorLog          Json      @default("[]") @map("error_log")
+  metadata          Json      @default("{}")
+
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user              User      @relation(fields: [userId], references: [userId])
+  account           LiveTradingAccount @relation(fields: [accountId], references: [accountId])
+  positions         LivePosition[]
+  orders            LiveOrder[]
+
+  @@unique([strategyId, userId])
+  @@index([userId])
+  @@index([status])
+  @@index([symbol])
+  @@map("live_strategies")
+}
+
+// Live Trading Account - Real trading account connection
+model LiveTradingAccount {
+  id                Int       @id @default(autoincrement())
+  accountId         String    @unique @map("account_id")
+  userId            String    @map("user_id")
+
+  // Account Details
+  exchangeName      String    @default("binance") @map("exchange_name")
+  accountType       String    @default("futures") @map("account_type") // spot, futures, margin
+
+  // API Configuration
+  apiConfig         Json      @map("api_config") // Encrypted API keys and settings
+  isTestnet         Boolean   @default(false) @map("is_testnet")
+
+  // Account Balance (cached from exchange)
+  totalBalance      Decimal   @default(0) @db.Decimal(20, 8) @map("total_balance")
+  availableBalance  Decimal   @default(0) @db.Decimal(20, 8) @map("available_balance")
+  marginUsed        Decimal   @default(0) @db.Decimal(20, 8) @map("margin_used")
+  unrealizedPnl     Decimal   @default(0) @db.Decimal(20, 8) @map("unrealized_pnl")
+
+  // Risk Limits
+  maxDailyLoss      Decimal   @default(500) @db.Decimal(20, 8) @map("max_daily_loss")
+  maxPositionSize   Decimal   @default(1000) @db.Decimal(20, 8) @map("max_position_size")
+  maxOpenPositions  Int       @default(5) @map("max_open_positions")
+
+  // Status
+  isActive          Boolean   @default(true) @map("is_active")
+  isConnected       Boolean   @default(false) @map("is_connected")
+  lastSyncAt        DateTime? @map("last_sync_at")
+
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  user              User      @relation(fields: [userId], references: [userId])
+  strategies        LiveStrategy[]
+  positions         LivePosition[]
+  orders            LiveOrder[]
+
+  @@index([userId])
+  @@index([exchangeName])
+  @@map("live_trading_accounts")
+}
+
+// Live Trading Positions - Real positions from exchange
+model LivePosition {
+  id                Int       @id @default(autoincrement())
+  positionId        String    @unique @map("position_id")
+  accountId         String    @map("account_id")
+  userId            String    @map("user_id")
+  strategyId        String?   @map("strategy_id") // Can be null for manual trades
+
+  // Exchange Details
+  exchangePositionId String? @map("exchange_position_id")
+  exchangeSymbol    String    @map("exchange_symbol")
+
+  symbol            String
+  side              TradeSide
+  size              Decimal   @db.Decimal(20, 8)
+  entryPrice        Decimal   @db.Decimal(20, 8) @map("entry_price")
+  markPrice         Decimal   @db.Decimal(20, 8) @map("mark_price")
+  liquidationPrice  Decimal?  @db.Decimal(20, 8) @map("liquidation_price")
+
+  // P&L Tracking
+  unrealizedPnl     Decimal   @default(0) @db.Decimal(20, 8) @map("unrealized_pnl")
+  realizedPnl       Decimal   @default(0) @db.Decimal(20, 8) @map("realized_pnl")
+  totalFees         Decimal   @default(0) @db.Decimal(20, 8) @map("total_fees")
+
+  // Margin Info
+  margin            Decimal   @default(0) @db.Decimal(20, 8)
+  marginRatio       Decimal?  @db.Decimal(10, 4) @map("margin_ratio")
+
+  // Risk Management Orders
+  stopLoss          Decimal?  @db.Decimal(20, 8) @map("stop_loss")
+  takeProfit        Decimal?  @db.Decimal(20, 8) @map("take_profit")
+  stopOrderId       String?   @map("stop_order_id")
+  tpOrderId         String?   @map("tp_order_id")
+
+  status            PositionStatus @default(OPEN)
+  openedAt          DateTime  @default(now()) @map("opened_at")
+  closedAt          DateTime? @map("closed_at")
+  lastUpdatedAt     DateTime  @default(now()) @map("last_updated_at")
+  metadata          Json      @default("{}")
+
+  account           LiveTradingAccount @relation(fields: [accountId], references: [accountId], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [userId])
+  strategy          LiveStrategy? @relation(fields: [strategyId], references: [id])
+
+  @@index([accountId])
+  @@index([userId])
+  @@index([symbol])
+  @@index([status])
+  @@map("live_positions")
+}
+
+// Live Trading Orders - Real orders from exchange
+model LiveOrder {
+  id                Int       @id @default(autoincrement())
+  orderId           String    @unique @map("order_id")
+  accountId         String    @map("account_id")
+  userId            String    @map("user_id")
+  strategyId        String?   @map("strategy_id") // Can be null for manual orders
+
+  // Exchange Details
+  exchangeOrderId   String    @unique @map("exchange_order_id")
+  clientOrderId     String?   @map("client_order_id")
+
+  symbol            String
+  type              OrderType
+  side              TradeSide
+  amount            Decimal   @db.Decimal(20, 8)
+  price             Decimal?  @db.Decimal(20, 8)
+  stopPrice         Decimal?  @db.Decimal(20, 8) @map("stop_price")
+  triggerPrice      Decimal?  @db.Decimal(20, 8) @map("trigger_price")
+
+  // Execution Details
+  filled            Decimal   @default(0) @db.Decimal(20, 8)
+  remaining         Decimal   @db.Decimal(20, 8)
+  cost              Decimal   @default(0) @db.Decimal(20, 8)
+  averagePrice      Decimal?  @db.Decimal(20, 8) @map("average_price")
+  fee               Decimal   @default(0) @db.Decimal(20, 8)
+  feeCurrency       String?   @map("fee_currency")
+
+  // Timestamps
+  status            OrderStatus @default(PENDING)
+  placedAt          DateTime  @default(now()) @map("placed_at")
+  executedAt        DateTime? @map("executed_at")
+  cancelledAt       DateTime? @map("cancelled_at")
+  lastUpdatedAt     DateTime  @default(now()) @map("last_updated_at")
+
+  // Order Parameters
+  timeInForce       String    @default("GTC") @map("time_in_force") // GTC, IOC, FOK
+  reduceOnly        Boolean   @default(false) @map("reduce_only")
+  postOnly          Boolean   @default(false) @map("post_only")
+
+  // Risk & Strategy Info
+  confidence        Decimal?  @db.Decimal(5, 4) // Signal confidence that triggered this order
+  signalData        Json?     @map("signal_data") // Original signal that created this order
+  riskParams        Json?     @map("risk_params") // Stop loss, take profit params
+
+  metadata          Json      @default("{}")
+
+  account           LiveTradingAccount @relation(fields: [accountId], references: [accountId], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [userId])
+  strategy          LiveStrategy? @relation(fields: [strategyId], references: [id])
+
+  @@index([accountId])
+  @@index([userId])
+  @@index([symbol])
+  @@index([status])
+  @@index([type])
+  @@index([exchangeOrderId])
+  @@map("live_orders")
+}
+
+// ============= Enum Types =============
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+
+  @@map("conversation_status")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  
+  @@map("message_role")
+}
+
+enum StrategyStatus {
+  DRAFT
+  TESTING
+  ACTIVE
+  PAUSED
+  ARCHIVED
+  
+  @@map("strategy_status")
+}
+
+enum TradeType {
+  BUY
+  SELL
+  PNL_SNAPSHOT
+
+  @@map("trade_type")
+}
+
+enum TradeSide {
+  LONG
+  SHORT
+  
+  @@map("trade_side")
+}
+
+enum TradeStatus {
+  PENDING
+  EXECUTED
+  FAILED
+  CANCELLED
+  
+  @@map("trade_status")
+}
+
+enum BacktestStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+
+  @@map("backtest_status")
+}
+
+enum TradingMode {
+  PAPER
+  LIVE
+
+  @@map("trading_mode")
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+  LIQUIDATED
+
+  @@map("position_status")
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+  STOP_LIMIT
+  TAKE_PROFIT
+
+  @@map("order_type")
+}
+
+enum OrderStatus {
+  PENDING
+  FILLED
+  PARTIALLY_FILLED
+  CANCELLED
+  REJECTED
+  EXPIRED
+
+  @@map("order_status")
+}

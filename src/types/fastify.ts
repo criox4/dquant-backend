@@ -10,7 +10,7 @@ declare module 'fastify' {
       email?: string;
       role?: string;
     };
-    context: RequestContext;
+    requestContext?: RequestContext;
   }
 
   interface FastifyInstance {

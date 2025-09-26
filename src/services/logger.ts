@@ -3,7 +3,6 @@ import { config } from '@/config/environment';
 import {
   Logger,
   LogContext,
-  LogLevel,
   CategoryLogger,
   LogCategory,
   RequestLogger,
@@ -21,7 +20,7 @@ const customFormat = winston.format.combine(
   winston.format.splat(),
   winston.format.json(),
   winston.format.printf(({ timestamp, level, message, context, error, ...meta }) => {
-    const logEntry: any = {
+    const logEntry = {
       timestamp,
       level,
       message,
@@ -51,9 +50,9 @@ const developmentFormat = winston.format.combine(
       logMessage += ` (${contextStr})`;
     }
 
-    if (error) {
+    if (error && typeof error === 'object' && 'message' in error) {
       logMessage += `\n  Error: ${error.message}`;
-      if (error.stack && config.LOG_LEVEL === 'debug') {
+      if ('stack' in error && error.stack && config.LOG_LEVEL === 'debug') {
         logMessage += `\n  Stack: ${error.stack}`;
       }
     }
@@ -151,12 +150,17 @@ class BaseLogger implements Logger {
 
 // Category logger implementation
 class CategoryLoggerImpl extends BaseLogger implements CategoryLogger {
+  private winston: winston.Logger;
+  private defaultContext?: LogContext;
+
   constructor(
     winston: winston.Logger,
     public category: LogCategory,
     defaultContext?: LogContext
   ) {
     super(winston, { ...defaultContext, component: category });
+    this.winston = winston;
+    this.defaultContext = defaultContext;
   }
 
   child(context: LogContext): CategoryLogger {

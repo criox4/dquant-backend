@@ -10,7 +10,7 @@ export interface LogContext {
   tradeId?: string;
   sessionId?: string;
   ip?: string;
-  userAgent?: string;
+  userAgent?: string | undefined;
   method?: string;
   url?: string;
   statusCode?: number;

@@ -15,7 +15,7 @@ export async function setupWebSocket(app: FastifyInstance): Promise<void> {
     await app.register(import('@fastify/websocket'), {
       options: {
         maxPayload: 1048576, // 1MB
-        verifyClient: (info) => {
+        verifyClient: (_info) => {
           // TODO: Add authentication verification
           return true;
         }
@@ -31,7 +31,7 @@ export async function setupWebSocket(app: FastifyInstance): Promise<void> {
         websocketLogger.info('New WebSocket connection', {
           connectionId,
           ip: clientIp,
-          userAgent: request.headers['user-agent']
+          userAgent: request.headers['user-agent'] as string | undefined
         });
 
         // Store connection

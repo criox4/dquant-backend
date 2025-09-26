@@ -37,7 +37,7 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
             }
           }
         }
-      }, async (request, reply) => {
+      }, async (_request, reply) => {
         await reply.send({
           success: true,
           data: {
@@ -71,7 +71,7 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
             }
           }
         }
-      }, async (request, reply) => {
+      }, async (_request, reply) => {
         const memoryUsage = process.memoryUsage();
 
         await reply.send({

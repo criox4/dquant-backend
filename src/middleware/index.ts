@@ -57,8 +57,8 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
         code: 'RATE_LIMIT_EXCEEDED',
         details: {
           limit: context.max,
-          window: context.timeWindow,
-          retryAfter: context.timeWindow
+          window: '15 minutes',
+          retryAfter: '15 minutes'
         },
         timestamp: new Date().toISOString()
       };
@@ -66,7 +66,7 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
     onExceeded: (request, key) => {
       securityLogger.warn('Rate limit exceeded', {
         ip: request.ip,
-        userAgent: request.headers['user-agent'],
+        userAgent: request.headers['user-agent'] as string | undefined,
         url: request.url,
         method: request.method,
         key
@@ -80,12 +80,12 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Create request context
-    request.context = {
+    request.requestContext = {
       userId: request.headers['x-user-id'] as string,
       conversationId: request.headers['x-conversation-id'] as string,
       sessionId: request.headers['x-session-id'] as string || requestId,
       ip: request.ip,
-      userAgent: request.headers['user-agent'],
+      userAgent: request.headers['user-agent'] as string | undefined,
       timestamp: new Date().toISOString()
     };
 
@@ -96,8 +96,8 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
     requestLogger.logRequest(request.method, request.url, {
       requestId,
       ip: request.ip,
-      userAgent: request.headers['user-agent'],
-      userId: request.context.userId
+      userAgent: request.headers['user-agent'] as string | undefined,
+      userId: request.requestContext.userId
     });
   });
 
@@ -106,11 +106,11 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
     const responseTime = reply.elapsedTime;
 
     requestLogger.logResponse(reply.statusCode, responseTime, {
-      requestId: request.context.sessionId,
+      requestId: request.requestContext?.sessionId,
       method: request.method,
       url: request.url,
       statusCode: reply.statusCode,
-      userId: request.context.userId
+      userId: request.requestContext?.userId
     });
 
     // Log slow requests
@@ -120,7 +120,7 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
         url: request.url,
         responseTime: `${responseTime}ms`,
         statusCode: reply.statusCode,
-        userId: request.context.userId
+        userId: request.requestContext?.userId
       });
     }
   });
@@ -130,7 +130,7 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
     const contentLength = request.headers['content-length'];
     const maxSize = 10 * 1024 * 1024; // 10MB
 
-    if (contentLength && parseInt(contentLength, 10) > maxSize) {
+    if (contentLength && parseInt(contentLength as string, 10) > maxSize) {
       requestLogger.warn('Request body too large', {
         contentLength,
         maxSize,
@@ -153,7 +153,7 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
   });
 
   // Security headers for API responses
-  app.addHook('onSend', async (request, reply, payload) => {
+  app.addHook('onSend', async (_request, reply, payload) => {
     // Add security headers
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
@@ -170,7 +170,7 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
   });
 
   // Graceful shutdown hook
-  app.addHook('onClose', async (instance) => {
+  app.addHook('onClose', async (_instance) => {
     requestLogger.info('Application shutting down gracefully');
   });
 }

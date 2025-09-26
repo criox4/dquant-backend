@@ -12,16 +12,18 @@ import { errorHandler } from '@/middleware/errorHandler';
 export async function createApp(): Promise<FastifyInstance> {
   // Create Fastify instance with configuration
   const app = Fastify({
-    logger: {
+    logger: config.NODE_ENV === 'development' ? {
       level: config.LOG_LEVEL,
-      transport: config.NODE_ENV === 'development' ? {
+      transport: {
         target: 'pino-pretty',
         options: {
           colorize: true,
           translateTime: 'HH:MM:ss Z',
           ignore: 'pid,hostname'
         }
-      } : undefined
+      }
+    } : {
+      level: config.LOG_LEVEL
     },
     trustProxy: config.NODE_ENV === 'production',
     keepAliveTimeout: 65000,
