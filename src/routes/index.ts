@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { apiLogger } from '@/services/logger';
 import conversationsRoutes from '@/routes/conversations';
+import strategiesRoutes from '@/routes/strategies';
+import marketDataRoutes from '@/routes/market-data';
 
 export async function setupRoutes(app: FastifyInstance): Promise<void> {
   try {
@@ -11,12 +13,16 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
       // Register conversation routes
       await app.register(conversationsRoutes);
 
+      // Register strategy routes
+      await app.register(strategiesRoutes);
+
+      // Register market data routes
+      await app.register(marketDataRoutes, { prefix: '/market' });
+
       // TODO: Register remaining route modules
-      // await app.register(strategyRoutes, { prefix: '/strategies' });
       // await app.register(backtestRoutes, { prefix: '/backtest' });
       // await app.register(paperTradingRoutes, { prefix: '/paper' });
       // await app.register(liveRoutes, { prefix: '/live' });
-      // await app.register(marketDataRoutes, { prefix: '/market' });
 
       // Temporary placeholder routes for testing
       app.get('/', {

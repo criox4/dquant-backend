@@ -9,6 +9,8 @@ import {
   StreamingOptions
 } from '@/types/conversation';
 import { ConversationDataService, getConversationDataService } from '@/services/conversation-data';
+import { StrategyManager } from '@/services/strategy-manager';
+import { OpenRouterService } from '@/services/openrouter';
 import { apiLogger, performanceLogger } from '@/services/logger';
 import { broadcastToRoom } from '@/websocket/server';
 import { WebSocketEvent } from '@/types/common';
@@ -23,12 +25,17 @@ export class ConversationManager {
   };
 
   public conversationDataService: ConversationDataService;
+  public strategyManager: StrategyManager;
+  public openRouterService: OpenRouterService;
 
   constructor(
     conversationDataService?: ConversationDataService,
+    strategyManager?: StrategyManager,
     config: Partial<ConversationManagerConfig> = {}
   ) {
     this.conversationDataService = conversationDataService || getConversationDataService();
+    this.strategyManager = strategyManager || new StrategyManager();
+    this.openRouterService = new OpenRouterService();
     this.config = {
       contextWindow: 10,
       maxActiveConversations: 1000,
@@ -193,8 +200,66 @@ export class ConversationManager {
     });
   }
 
-  private async identifyIntent(message: string, _context: any): Promise<IntentResult> {
-    // Simple intent classification - can be replaced with ML model
+  private async identifyIntent(message: string, context: any): Promise<IntentResult> {
+    try {
+      // Use OpenRouter AI for intelligent intent recognition
+      const intentPrompt = `
+        Analyze the following user message and classify the intent for a trading system.
+        Context: ${JSON.stringify(context, null, 2)}
+
+        User message: "${message}"
+
+        Classify into one of these intents:
+        - GREETING: User is greeting or starting conversation
+        - STRATEGY_REQUEST: User wants to create, modify, or discuss trading strategies
+        - BACKTEST_REQUEST: User wants to test strategies against historical data
+        - MARKET_DATA_REQUEST: User wants market data, prices, charts, or analysis
+        - GENERAL_QUERY: General questions about trading, markets, or the system
+
+        Respond with JSON: {"intent": "INTENT_TYPE", "confidence": 0.0-1.0, "reasoning": "brief explanation", "parameters": {}}
+      `;
+
+      const response = await this.openRouterService.processConversation(
+        [{ role: 'user', content: intentPrompt }],
+        {
+          model: 'claude-3.5-sonnet',
+          maxTokens: 200,
+          temperature: 0.1
+        }
+      );
+
+      if (response.success && response.data?.choices?.[0]?.message?.content) {
+        try {
+          const intentData = JSON.parse(response.data.choices[0].message.content);
+
+          return {
+            type: intentData.intent,
+            confidence: intentData.confidence || 0.7,
+            parameters: {
+              message,
+              reasoning: intentData.reasoning,
+              aiParsed: true,
+              ...intentData.parameters
+            }
+          };
+        } catch (parseError) {
+          apiLogger.warn('Failed to parse AI intent response', {
+            response: response.data.choices[0].message.content,
+            error: parseError
+          });
+        }
+      }
+
+      // Fallback to simple keyword-based classification
+      return this.simpleIntentClassification(message);
+
+    } catch (error) {
+      apiLogger.warn('AI intent recognition failed, using fallback', error as Error);
+      return this.simpleIntentClassification(message);
+    }
+  }
+
+  private simpleIntentClassification(message: string): IntentResult {
     const messageLower = message.toLowerCase();
 
     // Strategy-related keywords
@@ -203,7 +268,7 @@ export class ConversationManager {
       return {
         type: 'STRATEGY_REQUEST',
         confidence: 0.8,
-        parameters: { message }
+        parameters: { message, fallback: true }
       };
     }
 
@@ -213,7 +278,7 @@ export class ConversationManager {
       return {
         type: 'BACKTEST_REQUEST',
         confidence: 0.8,
-        parameters: { message }
+        parameters: { message, fallback: true }
       };
     }
 
@@ -223,7 +288,7 @@ export class ConversationManager {
       return {
         type: 'MARKET_DATA_REQUEST',
         confidence: 0.7,
-        parameters: { message }
+        parameters: { message, fallback: true }
       };
     }
 
@@ -233,7 +298,7 @@ export class ConversationManager {
       return {
         type: 'GREETING',
         confidence: 0.9,
-        parameters: { message }
+        parameters: { message, fallback: true }
       };
     }
 
@@ -241,7 +306,7 @@ export class ConversationManager {
     return {
       type: 'GENERAL_QUERY',
       confidence: 0.5,
-      parameters: { message }
+      parameters: { message, fallback: true }
     };
   }
 
@@ -298,18 +363,78 @@ export class ConversationManager {
   }
 
   private async handleStrategyRequest(
-    _conversationId: string,
+    conversationId: string,
     message: string,
-    _conversation: ConversationData
+    conversation: ConversationData
   ): Promise<ProcessMessageResponse> {
-    // TODO: Integrate with strategy service
-    return {
-      message: "I'll help you create a trading strategy. Let me analyze your requirements and generate a custom strategy for you...",
-      metadata: {
-        action: 'STRATEGY_GENERATION_STARTED',
-        parameters: { originalMessage: message }
+    try {
+      // Extract conversation context for strategy processing
+      const context = {
+        conversationId,
+        currentStrategy: conversation.metadata?.currentStrategy,
+        previousStrategies: conversation.metadata?.strategies || [],
+        userPreferences: conversation.metadata?.userPreferences || {}
+      };
+
+      // Use strategy manager to process the request
+      const response = await this.strategyManager.processStrategyMessage(
+        conversationId,
+        message,
+        context
+      );
+
+      // If a strategy was created, update conversation metadata
+      if (response.strategyId) {
+        const updatedMetadata = {
+          ...conversation.metadata,
+          currentStrategy: {
+            strategyId: response.strategyId,
+            createdAt: new Date().toISOString(),
+            name: response.data?.strategy?.name
+          },
+          strategies: [
+            ...(conversation.metadata?.strategies || []),
+            {
+              strategyId: response.strategyId,
+              createdAt: new Date().toISOString(),
+              action: response.action
+            }
+          ]
+        };
+
+        await this.conversationDataService.updateConversation(conversationId, {
+          metadata: updatedMetadata
+        });
+
+        // Send WebSocket notification about strategy creation
+        await this.sendToConversation(conversationId, {
+          event: 'strategy_created',
+          data: {
+            strategyId: response.strategyId,
+            strategy: response.data?.strategy,
+            conversationId
+          },
+          timestamp: new Date().toISOString()
+        });
       }
-    };
+
+      return response;
+
+    } catch (error) {
+      apiLogger.error('Failed to process strategy request', error as Error, {
+        conversationId,
+        messageLength: message.length
+      });
+
+      return {
+        message: `I encountered an error while processing your strategy request: ${(error as Error).message}. Please try rephrasing your request with more specific details about the trading strategy you'd like to create.`,
+        metadata: {
+          action: 'STRATEGY_ERROR',
+          error: (error as Error).message,
+          parameters: { originalMessage: message }
+        }
+      };
+    }
   }
 
   private async handleBacktestRequest(
@@ -343,18 +468,80 @@ export class ConversationManager {
   }
 
   private async handleGeneralQuery(
-    _conversationId: string,
+    conversationId: string,
     message: string,
-    _conversation: ConversationData
+    conversation: ConversationData
   ): Promise<ProcessMessageResponse> {
-    // TODO: Integrate with OpenRouter/AI service
-    return {
-      message: "I understand your question. Let me provide you with a comprehensive answer based on my knowledge of trading and market analysis...",
-      metadata: {
-        action: 'GENERAL_RESPONSE',
-        parameters: { originalMessage: message }
+    try {
+      // Get conversation history for context
+      const history = await this.getConversationHistory(conversationId, 10);
+
+      // Build context-aware prompt
+      const contextualPrompt = `
+        You are DQuant, an intelligent trading assistant. Answer the user's question with expertise in:
+        - Trading strategies and algorithmic trading
+        - Technical analysis and indicators
+        - Risk management and portfolio optimization
+        - Market analysis and financial markets
+        - Backtesting and strategy validation
+
+        Conversation history:
+        ${history.slice(-5).map(msg => `${msg.sender}: ${msg.content}`).join('\n')}
+
+        Current user question: "${message}"
+
+        Provide a helpful, accurate, and concise response. If the question relates to trading strategies, suggest creating one. Be conversational and professional.
+      `;
+
+      const response = await this.openRouterService.processConversation(
+        [{ role: 'user', content: contextualPrompt }],
+        {
+          model: 'claude-3.5-sonnet',
+          maxTokens: 800,
+          temperature: 0.3
+        }
+      );
+
+      if (response.success && response.data?.choices?.[0]?.message?.content) {
+        const aiResponse = response.data.choices[0].message.content;
+
+        return {
+          message: aiResponse,
+          metadata: {
+            action: 'GENERAL_AI_RESPONSE',
+            parameters: {
+              originalMessage: message,
+              model: 'claude-3.5-sonnet',
+              tokens: response.data.usage?.total_tokens || 0
+            }
+          }
+        };
       }
-    };
+
+      // Fallback response if AI fails
+      return {
+        message: "I understand your question about trading and markets. While I'm temporarily unable to provide a detailed AI-powered response, I can help you create trading strategies, run backtests, or analyze market data. What specific aspect would you like to explore?",
+        metadata: {
+          action: 'GENERAL_FALLBACK_RESPONSE',
+          parameters: { originalMessage: message }
+        }
+      };
+
+    } catch (error) {
+      apiLogger.error('Error processing general query with AI', error as Error, {
+        conversationId,
+        messageLength: message.length
+      });
+
+      return {
+        message: "I encountered an issue while processing your question. However, I can still help you with trading strategies, backtesting, or market analysis. What would you like to work on?",
+        metadata: {
+          action: 'GENERAL_ERROR_RESPONSE',
+          error: (error as Error).message,
+          parameters: { originalMessage: message }
+        }
+      };
+    }
   }
 
   private async getOrLoadConversation(conversationId: string): Promise<ConversationData> {
