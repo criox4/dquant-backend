@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { WebSocketConnection } from '@/types/fastify';
 import { websocketLogger } from '@/services/logger';
 import { WebSocketEvent } from '@/types/common';
+import { setupSocketIOCompatibility, emitToSocketIORoom, emitToSocketIOUser, getSocketIOStats } from './socket-io-compatibility';
 
 // Connection management
 const connections = new Map<string, WebSocketConnection>();
@@ -10,6 +11,17 @@ const rooms = new Map<string, Set<string>>();
 export async function setupWebSocket(app: FastifyInstance): Promise<void> {
   try {
     websocketLogger.info('Setting up WebSocket server');
+
+    // Setup Socket.IO compatibility layer first
+    await setupSocketIOCompatibility(app, {
+      enabled: process.env.SOCKETIO_COMPATIBILITY !== 'false',
+      cors: {
+        origin: process.env.NODE_ENV === 'development'
+          ? ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173']
+          : process.env.FRONTEND_URLS?.split(',') || [],
+        credentials: true
+      }
+    });
 
     // Register WebSocket plugin
     await app.register(import('@fastify/websocket'), {
@@ -324,17 +336,26 @@ async function sendToConnection(connectionId: string, message: WebSocketEvent): 
 
 async function broadcastToRoom(roomName: string, message: WebSocketEvent): Promise<number> {
   const room = rooms.get(roomName);
-  if (!room) return 0;
-
   let sentCount = 0;
-  for (const connectionId of room) {
-    const sent = await sendToConnection(connectionId, message);
-    if (sent) sentCount++;
+
+  // Broadcast to native WebSocket connections
+  if (room) {
+    for (const connectionId of room) {
+      const sent = await sendToConnection(connectionId, message);
+      if (sent) sentCount++;
+    }
+  }
+
+  // Also broadcast to Socket.IO clients for compatibility
+  try {
+    emitToSocketIORoom(roomName, message.event, message.data);
+  } catch (error) {
+    websocketLogger.warn('Failed to emit to Socket.IO room:', error);
   }
 
   websocketLogger.debug('Broadcast to room', {
     roomName,
-    totalConnections: room.size,
+    totalConnections: room?.size || 0,
     successfulSends: sentCount
   });
 
@@ -342,7 +363,16 @@ async function broadcastToRoom(roomName: string, message: WebSocketEvent): Promi
 }
 
 async function broadcastToUser(userId: string, message: WebSocketEvent): Promise<number> {
-  return broadcastToRoom(`user_${userId}`, message);
+  const result = await broadcastToRoom(`user_${userId}`, message);
+
+  // Also emit directly to Socket.IO user for compatibility
+  try {
+    emitToSocketIOUser(userId, message.event, message.data);
+  } catch (error) {
+    websocketLogger.warn('Failed to emit to Socket.IO user:', error);
+  }
+
+  return result;
 }
 
 // Connection cleanup
@@ -376,6 +406,10 @@ export function getWebSocketStats(): {
   authenticatedConnections: number;
   totalRooms: number;
   roomDistribution: Record<string, number>;
+  socketIO: {
+    totalConnections: number;
+    roomDistribution: Record<string, number>;
+  };
 } {
   const authenticatedCount = Array.from(connections.values())
     .filter(conn => conn.userId).length;
@@ -385,11 +419,14 @@ export function getWebSocketStats(): {
     roomDistribution[roomName] = roomConnections.size;
   }
 
+  const socketIOStats = getSocketIOStats();
+
   return {
     totalConnections: connections.size,
     authenticatedConnections: authenticatedCount,
     totalRooms: rooms.size,
-    roomDistribution
+    roomDistribution,
+    socketIO: socketIOStats
   };
 }
 

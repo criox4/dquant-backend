@@ -10,6 +10,7 @@ import performanceAnalyticsRoutes from '@/routes/performance-analytics';
 import { riskManagementRoutes } from '@/routes/risk-management';
 import liveTradingRoutes from '@/routes/live-trading';
 import toolApprovalRoutes from '@/routes/tool-approval';
+import legacyCompatibilityRoutes from '@/routes/legacy-compatibility';
 
 export async function setupRoutes(app: FastifyInstance): Promise<void> {
   try {
@@ -46,6 +47,9 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
 
       // Register tool approval routes
       await app.register(toolApprovalRoutes, { prefix: '/tools' });
+
+      // Register legacy compatibility routes for drop-in replacement support
+      await app.register(legacyCompatibilityRoutes);
 
       // Temporary placeholder routes for testing
       app.get('/', {
