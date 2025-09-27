@@ -22,69 +22,9 @@ import {
 
 // GetPositionsRequest interface removed - using FastifyRequest directly
 
-interface GetPositionRequest extends FastifyRequest {
-  Params: {
-    symbol: string;
-  };
-}
+// All request interfaces removed - using FastifyRequest directly with type assertions
 
-interface SetLeverageRequest extends FastifyRequest {
-  Params: {
-    symbol: string;
-  };
-  Body: {
-    leverage: number;
-  };
-}
-
-interface SetMarginModeRequest extends FastifyRequest {
-  Params: {
-    symbol: string;
-  };
-  Body: {
-    marginMode: 'cross' | 'isolated';
-  };
-}
-
-interface GetTickerRequest extends FastifyRequest {
-  Params: {
-    symbol: string;
-  };
-}
-
-interface GetTickersRequest extends FastifyRequest {
-  Querystring: {
-    symbols?: string;
-  };
-}
-
-interface GetOrderBookRequest extends FastifyRequest {
-  Params: {
-    symbol: string;
-  };
-  Querystring: {
-    limit?: number;
-  };
-}
-
-interface GetCandlesRequest extends FastifyRequest {
-  Params: {
-    symbol: string;
-  };
-  Querystring: {
-    timeframe: string;
-    since?: number;
-    limit?: number;
-  };
-}
-
-interface GetTradesRequest extends FastifyRequest {
-  Querystring: {
-    symbol?: string;
-    since?: number;
-    limit?: number;
-  };
-}
+// All remaining request interfaces removed - using FastifyRequest directly with type assertions
 
 export default async function liveTradingRoutes(app: FastifyInstance): Promise<void> {
   // OpenAPI Tags
@@ -716,10 +656,10 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: SetLeverageRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol } = request.params;
-      const { leverage } = request.body;
+      const { symbol } = request.params as { symbol: string };
+      const { leverage } = request.body as { leverage: number };
 
       await binanceLiveTradingService.setLeverage(symbol, leverage);
 
@@ -774,10 +714,10 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: SetMarginModeRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol } = request.params;
-      const { marginMode } = request.body;
+      const { symbol } = request.params as { symbol: string };
+      const { marginMode } = request.body as { marginMode: 'cross' | 'isolated' };
 
       await binanceLiveTradingService.setMarginMode(symbol, marginMode);
 
@@ -821,9 +761,9 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetTickerRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol } = request.params;
+      const { symbol } = request.params as { symbol: string };
       const ticker = await binanceLiveTradingService.getTicker(symbol);
 
       await reply.status(200).send({
@@ -863,9 +803,9 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetTickersRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbols } = request.query;
+      const { symbols } = request.query as { symbols?: string };
       const symbolList = symbols ? symbols.split(',') : undefined;
       const tickers = await binanceLiveTradingService.getTickers(symbolList);
 
@@ -913,10 +853,10 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetOrderBookRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol } = request.params;
-      const { limit } = request.query;
+      const { symbol } = request.params as { symbol: string };
+      const { limit } = request.query as { limit?: number };
       const orderbook = await binanceLiveTradingService.getOrderBook(symbol, limit);
 
       await reply.status(200).send({
@@ -966,10 +906,10 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetCandlesRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol } = request.params;
-      const { timeframe, since, limit } = request.query;
+      const { symbol } = request.params as { symbol: string };
+      const { timeframe, since, limit } = request.query as { timeframe: string, since?: number, limit?: number };
       const candles = await binanceLiveTradingService.getCandles(symbol, timeframe, since, limit);
 
       await reply.status(200).send({
@@ -1046,9 +986,9 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetTradesRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol, since, limit } = request.query;
+      const { symbol, since, limit } = request.query as { symbol?: string, since?: number, limit?: number };
       const trades = await binanceLiveTradingService.getMyTrades(symbol, since, limit);
 
       await reply.status(200).send({

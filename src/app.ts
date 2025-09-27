@@ -9,6 +9,50 @@ import { setupRedis } from '@/config/redis';
 import { logger } from '@/services/logger';
 import { errorHandler } from '@/middleware/errorHandler';
 
+/**
+ * Check Binance API health by pinging their server status endpoint
+ */
+async function checkBinanceHealth(): Promise<boolean> {
+  try {
+    const response = await fetch('https://api.binance.com/api/v3/ping', {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'DQuant-Backend/1.0',
+      },
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    });
+    return response.ok;
+  } catch (error) {
+    logger.warn('Binance health check failed:', (error as Error).message);
+    return false;
+  }
+}
+
+/**
+ * Check OpenRouter API health by attempting to fetch available models
+ */
+async function checkOpenRouterHealth(): Promise<boolean> {
+  try {
+    if (!config.OPENROUTER_API_KEY) {
+      return false; // No API key configured
+    }
+
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'DQuant-Backend/1.0',
+      },
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    });
+    return response.ok;
+  } catch (error) {
+    logger.warn('OpenRouter health check failed:', (error as Error).message);
+    return false;
+  }
+}
+
 export async function createApp(): Promise<FastifyInstance> {
   // Create Fastify instance with configuration
   const app = Fastify({
@@ -96,12 +140,15 @@ export async function createApp(): Promise<FastifyInstance> {
         // Check Redis connection
         const redisStatus = app.redis.isReady;
 
-        // TODO: Add Binance and OpenRouter health checks
+        // Check external services
+        const binanceStatus = await checkBinanceHealth();
+        const openrouterStatus = await checkOpenRouterHealth();
+
         const services = {
           database: dbStatus,
           redis: redisStatus,
-          binance: true, // Will be implemented later
-          openrouter: true // Will be implemented later
+          binance: binanceStatus,
+          openrouter: openrouterStatus
         };
 
         const healthData = {

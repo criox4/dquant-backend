@@ -9,6 +9,7 @@ import { paperTradingWebSocketRoutes } from '@/routes/paper-trading-websocket';
 import performanceAnalyticsRoutes from '@/routes/performance-analytics';
 import { riskManagementRoutes } from '@/routes/risk-management';
 import liveTradingRoutes from '@/routes/live-trading';
+import toolApprovalRoutes from '@/routes/tool-approval';
 
 export async function setupRoutes(app: FastifyInstance): Promise<void> {
   try {
@@ -42,6 +43,9 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
 
       // Register live trading routes
       await app.register(liveTradingRoutes, { prefix: '/live' });
+
+      // Register tool approval routes
+      await app.register(toolApprovalRoutes, { prefix: '/tools' });
 
       // Temporary placeholder routes for testing
       app.get('/', {

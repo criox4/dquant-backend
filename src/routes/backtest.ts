@@ -479,29 +479,65 @@ async function backtestRoutes(app: FastifyInstance): Promise<void> {
 
       const { limit, offset } = validation.data;
 
-      // For now, return mock data since we need database integration
-      const mockBacktests = [
-        {
-          id: 'bt_1',
-          backtestId: 'backtest_001',
-          strategyId: 'strategy_1',
-          symbol: 'BTC/USDT',
-          status: 'COMPLETED',
-          performance: {
-            totalReturnPercentage: 15.5,
-            maxDrawdownPercentage: -8.2,
-            sharpeRatio: 1.8,
-            totalTrades: 45
-          },
-          createdAt: new Date().toISOString()
-        }
-      ];
+      // Build database query with filters
+      const whereClause: any = {};
+
+      if (validation.data.strategyId) {
+        whereClause.strategyId = validation.data.strategyId;
+      }
+
+      if (validation.data.symbol) {
+        whereClause.symbol = validation.data.symbol;
+      }
+
+      if (validation.data.status) {
+        whereClause.status = validation.data.status;
+      }
+
+      // Query backtest results from database
+      const [backtests, total] = await Promise.all([
+        app.prisma.backtestResult.findMany({
+          where: whereClause,
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+          select: {
+            id: true,
+            strategyId: true,
+            symbol: true,
+            status: true,
+            results: true, // JSON field containing performance metrics
+            createdAt: true,
+            updatedAt: true,
+          }
+        }),
+        app.prisma.backtestResult.count({
+          where: whereClause
+        })
+      ]);
+
+      // Transform results to match expected format
+      const formattedBacktests = backtests.map(bt => ({
+        id: bt.id,
+        backtestId: bt.id, // Use same ID for compatibility
+        strategyId: bt.strategyId,
+        symbol: bt.symbol,
+        status: bt.status,
+        performance: bt.results ? {
+          totalReturnPercentage: (bt.results as any)?.totalReturn || 0,
+          maxDrawdownPercentage: (bt.results as any)?.maxDrawdown || 0,
+          sharpeRatio: (bt.results as any)?.sharpeRatio || 0,
+          totalTrades: (bt.results as any)?.totalTrades || 0
+        } : null,
+        createdAt: bt.createdAt.toISOString(),
+        updatedAt: bt.updatedAt.toISOString()
+      }));
 
       await reply.send({
         success: true,
         data: {
-          backtests: mockBacktests,
-          total: mockBacktests.length,
+          backtests: formattedBacktests,
+          total,
           limit,
           offset
         }
