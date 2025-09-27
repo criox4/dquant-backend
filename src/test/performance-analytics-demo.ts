@@ -54,8 +54,8 @@ export async function demonstratePerformanceAnalytics() {
     const equityCurve = await performanceAnalyticsService.generateEquityCurve(accountId);
 
     if (equityCurve.length > 0) {
-      const startEquity = equityCurve[0].equity;
-      const endEquity = equityCurve[equityCurve.length - 1].equity;
+      const startEquity = equityCurve[0]?.equity || 0;
+      const endEquity = equityCurve[equityCurve.length - 1]?.equity || 0;
       const maxEquity = Math.max(...equityCurve.map(p => p.equity));
       const minDrawdown = Math.min(...equityCurve.map(p => p.drawdown));
 
@@ -71,7 +71,7 @@ export async function demonstratePerformanceAnalytics() {
 
     if (drawdownCurve.length > 0) {
       const maxDays = Math.max(...drawdownCurve.map(d => d.daysSinceHigh));
-      const currentDays = drawdownCurve[drawdownCurve.length - 1].daysSinceHigh;
+      const currentDays = drawdownCurve[drawdownCurve.length - 1]?.daysSinceHigh || 0;
       const newHighs = drawdownCurve.filter(d => d.isNewHigh).length;
 
       console.log(`📉 Max Days in Drawdown: ${maxDays}`);

@@ -7,7 +7,7 @@ import { config } from '@/config/environment';
 // Custom error classes
 export class AppError extends Error {
   constructor(
-    public message: string,
+    public override message: string,
     public statusCode: number = 500,
     public code?: string,
     public details?: unknown
@@ -74,7 +74,7 @@ export async function errorHandler(
   reply: FastifyReply
 ): Promise<void> {
   const timestamp = new Date().toISOString();
-  const requestId = request.context?.sessionId || 'unknown';
+  const requestId = (request as any).requestContext?.sessionId || 'unknown';
 
   // Log error with context
   const errorContext = {
@@ -83,7 +83,7 @@ export async function errorHandler(
     url: request.url,
     ip: request.ip,
     userAgent: request.headers['user-agent'],
-    userId: request.context?.userId,
+    userId: (request as any).requestContext?.userId,
     error: {
       name: error.name,
       message: error.message,
@@ -100,7 +100,7 @@ export async function errorHandler(
       success: false,
       error: error.message,
       code: error.code,
-      ...(error.details && { details: error.details }),
+      ...(error.details ? { details: error.details } : {}),
       timestamp
     });
     return;

@@ -50,7 +50,7 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
              request.headers['x-real-ip'] as string ||
              request.ip;
     },
-    errorResponseBuilder: (request, context) => {
+    errorResponseBuilder: (_request, context) => {
       return {
         success: false,
         error: 'Too many requests',

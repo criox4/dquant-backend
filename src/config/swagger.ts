@@ -257,7 +257,7 @@ export async function setupSwagger(app: FastifyInstance): Promise<void> {
     schema: {
       hide: true
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     await reply.send(app.swagger());
   });
 
@@ -266,7 +266,7 @@ export async function setupSwagger(app: FastifyInstance): Promise<void> {
     schema: {
       hide: true
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     const yaml = await import('js-yaml');
     const yamlString = yaml.dump(app.swagger());
 
