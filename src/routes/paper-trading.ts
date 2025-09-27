@@ -2,12 +2,6 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { apiLogger, tradingLogger } from '@/services/logger';
 import { PaperTradingService } from '@/services/paper-trading-service';
 import {
-  CreatePaperAccountRequest,
-  UpdatePaperAccountRequest,
-  CreatePaperOrderRequest,
-  CancelPaperOrderRequest,
-  GetPaperPositionsRequest,
-  GetPaperTradesRequest,
   PaperAccountResponse,
   PaperAccountListResponse,
   PaperOrderResponse,
@@ -27,8 +21,8 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
     paperTradingService = new PaperTradingService();
     await paperTradingService.initialize();
 
-    app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
-      request.log = apiLogger;
+    app.addHook('preHandler', async (request: FastifyRequest, _reply: FastifyReply) => {
+      (request as any).log = apiLogger;
     });
 
     app.get('/accounts', {
@@ -78,9 +72,9 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
           }
         }
       }
-    }, async (request: FastifyRequest<{ Querystring: any }>, reply: FastifyReply) => {
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { limit = 50, offset = 0, isActive } = request.query;
+        const { limit = 50, offset = 0, isActive } = request.query as { limit?: number; offset?: number; isActive?: boolean; };
         const userId = 'user-1'; // TODO: Get from JWT token
 
         const accounts = await paperTradingService.getUserAccounts(userId, { limit, offset, isActive });
@@ -153,10 +147,10 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
           }
         }
       }
-    }, async (request: FastifyRequest<CreatePaperAccountRequest>, reply: FastifyReply) => {
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = 'user-1'; // TODO: Get from JWT token
-        const { body } = request;
+        const body = request.body as any;
 
         const account = await paperTradingService.createAccount(userId, body);
 
@@ -270,10 +264,10 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
           }
         }
       }
-    }, async (request: FastifyRequest<UpdatePaperAccountRequest>, reply: FastifyReply) => {
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { accountId } = request.params;
-        const { body } = request;
+        const { accountId } = request.params as { accountId: string };
+        const body = request.body as any;
 
         const account = await paperTradingService.updateAccount(accountId, body);
         if (!account) {
@@ -368,10 +362,10 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
           }
         }
       }
-    }, async (request: FastifyRequest<CreatePaperOrderRequest>, reply: FastifyReply) => {
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { accountId } = request.params;
-        const { body } = request;
+        const { accountId } = request.params as { accountId: string };
+        const body = request.body as any;
 
         const order = await paperTradingService.createOrder(accountId, body);
 
@@ -411,9 +405,9 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
           }
         }
       }
-    }, async (request: FastifyRequest<CancelPaperOrderRequest>, reply: FastifyReply) => {
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { accountId, orderId } = request.params;
+        const { accountId, orderId } = request.params as { accountId: string; orderId: string };
 
         const success = await paperTradingService.cancelOrder(accountId, orderId);
         if (!success) {
@@ -503,9 +497,9 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
           }
         }
       }
-    }, async (request: FastifyRequest<GetPaperPositionsRequest>, reply: FastifyReply) => {
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { accountId } = request.params;
+        const { accountId } = request.params as { accountId: string };
         const filters = request.query;
 
         const positions = await paperTradingService.getPositions(accountId, filters);
@@ -596,9 +590,9 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
           }
         }
       }
-    }, async (request: FastifyRequest<GetPaperTradesRequest>, reply: FastifyReply) => {
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { accountId } = request.params;
+        const { accountId } = request.params as { accountId: string };
         const filters = request.query;
 
         const trades = await paperTradingService.getTrades(accountId, filters);
@@ -651,9 +645,9 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
         }
 
         // Mock additional performance data for now
-        const dailyPnL = []; // TODO: Implement daily P&L calculation
-        const equityCurve = []; // TODO: Implement equity curve calculation
-        const strategies = []; // TODO: Get strategy performance
+        const dailyPnL: any[] = []; // TODO: Implement daily P&L calculation
+        const equityCurve: any[] = []; // TODO: Implement equity curve calculation
+        const strategies: any[] = []; // TODO: Get strategy performance
 
         const response: PaperPerformanceResponse = {
           success: true,

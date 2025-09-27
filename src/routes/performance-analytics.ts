@@ -40,15 +40,7 @@ interface RollingMetricsRequest {
   };
 }
 
-interface RealTimeRequest {
-  Params: {
-    accountId: string;
-  };
-  Body: {
-    enable: boolean;
-    frequency?: number;
-  };
-}
+// Removed unused RealTimeRequest interface
 
 export default async function performanceAnalyticsRoutes(app: FastifyInstance) {
   // Get comprehensive performance metrics
@@ -629,10 +621,10 @@ export default async function performanceAnalyticsRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (request: FastifyRequest<RealTimeRequest>, reply) => {
+  }, async (request: FastifyRequest, reply) => {
     try {
-      const { accountId } = request.params;
-      const { enable, frequency } = request.body;
+      const { accountId } = request.params as { accountId: string };
+      const { enable } = request.body as { enable: boolean; frequency: number };
 
       if (enable) {
         await performanceAnalyticsService.startRealTimeAnalytics(accountId);

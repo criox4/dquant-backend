@@ -3,7 +3,7 @@
  * Comprehensive types for live trading operations using CCXT
  */
 
-import { Decimal } from '@prisma/client/runtime/library';
+// Removed unused Decimal import
 
 // CCXT-compatible types
 export interface CCXTOrder {
@@ -402,18 +402,5 @@ export class ExchangeConnectionError extends LiveTradingError {
   }
 }
 
-// Export all types
-export type {
-  LiveTradingConfig,
-  LiveTradingAccount,
-  LiveOrderParams,
-  LivePositionRequest,
-  LiveBalanceRequest,
-  LiveTradingEvent,
-  ExchangeStatus,
-  MarketInfo,
-  LiveTradingStats,
-  LiveRiskConfig,
-  ILiveTradingService
-};
+// Types are already exported with their definitions above
 

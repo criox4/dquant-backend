@@ -3,7 +3,7 @@
  * Comprehensive risk management types for trading operations
  */
 
-import { Decimal } from '@prisma/client/runtime/library';
+// Removed unused Decimal import
 
 // Risk Configuration Types
 export interface RiskProfile {
@@ -303,19 +303,5 @@ export interface RiskEvent {
   timestamp: Date;
 }
 
-// Export all types
-export type {
-  RiskProfile,
-  PositionSizingConfig,
-  RiskMetrics,
-  RiskRule,
-  RiskViolation,
-  PreTradeRiskCheck,
-  PositionRisk,
-  RiskReport,
-  RiskRecommendation,
-  RiskEngineConfig,
-  IRiskManager,
-  RiskEvent
-};
+// Types are already exported with their definitions above
 

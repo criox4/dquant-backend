@@ -8,55 +8,16 @@ import { riskManagementService } from '@/services/risk-management';
 import { tradingLogger } from '@/services/logger';
 import {
   RiskProfile,
-  RiskReport,
   PreTradeRiskCheck,
-  RiskViolation,
   PositionSizingConfig,
-  PositionSizingModel,
-  RiskSeverity
+  PositionSizingModel
 } from '@/types/risk-management';
 
-// Request/Response Types
-interface GetRiskProfileRequest extends FastifyRequest {
-  Params: { accountId: string };
-}
+// Request/Response types removed - using direct casting instead
 
-interface UpdateRiskProfileRequest extends FastifyRequest {
-  Params: { accountId: string };
-  Body: Partial<RiskProfile>;
-}
+// MonitoringRequest interface removed - using direct casting
 
-interface PreTradeCheckRequest extends FastifyRequest {
-  Body: {
-    accountId: string;
-    symbol: string;
-    side: 'buy' | 'sell';
-    quantity: number;
-    price: number;
-    orderType?: string;
-  };
-}
-
-interface CalculatePositionSizeRequest extends FastifyRequest {
-  Body: {
-    accountId: string;
-    symbol: string;
-    riskAmount: number;
-    config?: PositionSizingConfig;
-  };
-}
-
-interface MonitoringRequest extends FastifyRequest {
-  Params: { accountId: string };
-}
-
-interface EmergencyActionRequest extends FastifyRequest {
-  Params: { accountId: string };
-  Body: {
-    action: 'stop_loss' | 'reduce_positions' | 'liquidate';
-    percentage?: number;
-  };
-}
+// EmergencyActionRequest interface removed - using direct casting
 
 export async function riskManagementRoutes(app: FastifyInstance): Promise<void> {
   // OpenAPI Tags
@@ -114,9 +75,9 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: GetRiskProfileRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId } = request.params;
+      const { accountId } = request.params as { accountId: string };
       const profile = await riskManagementService.loadRiskProfile(accountId);
 
       await reply.status(200).send({
@@ -125,7 +86,7 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get risk profile', { error, accountId: request.params.accountId });
+      tradingLogger.error('Failed to get risk profile', { error, accountId: (request.params as { accountId: string }).accountId });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve risk profile'
@@ -194,10 +155,10 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: UpdateRiskProfileRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId } = request.params;
-      const updates = request.body;
+      const { accountId } = request.params as { accountId: string };
+      const updates = request.body as Partial<RiskProfile>;
 
       const updatedProfile = await riskManagementService.updateRiskProfile(accountId, updates);
 
@@ -207,7 +168,7 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to update risk profile', { error, accountId: request.params.accountId });
+      tradingLogger.error('Failed to update risk profile', { error, accountId: (request.params as { accountId: string }).accountId });
       await reply.status(500).send({
         success: false,
         error: 'Failed to update risk profile'
@@ -258,11 +219,12 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: PreTradeCheckRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const body = request.body as any;
       const tradeRequest: PreTradeRiskCheck = {
-        ...request.body,
-        orderType: request.body.orderType || 'market',
+        ...body,
+        orderType: body.orderType || 'market',
         isApproved: false,
         violations: [],
         warnings: [],
@@ -271,7 +233,7 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         portfolioImpact: 0,
         correlationImpact: 0,
         liquidityScore: 0,
-        positionValue: request.body.quantity * request.body.price,
+        positionValue: body.quantity * body.price,
         timestamp: new Date()
       };
 
@@ -343,9 +305,9 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: CalculatePositionSizeRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId, symbol, riskAmount, config } = request.body;
+      const { accountId, symbol, riskAmount, config } = request.body as { accountId: string; symbol: string; riskAmount: number; config?: PositionSizingConfig };
 
       const positionSize = await riskManagementService.calculatePositionSize(
         accountId,
@@ -415,9 +377,9 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: GetRiskProfileRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId } = request.params;
+      const { accountId } = request.params as { accountId: string };
       const metrics = await riskManagementService.calculatePortfolioRisk(accountId);
 
       await reply.status(200).send({
@@ -426,7 +388,7 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get portfolio risk metrics', { error, accountId: request.params.accountId });
+      tradingLogger.error('Failed to get portfolio risk metrics', { error, accountId: (request.params as { accountId: string }).accountId });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve portfolio risk metrics'
@@ -470,9 +432,9 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: GetRiskProfileRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId } = request.params;
+      const { accountId } = request.params as { accountId: string };
       const report = await riskManagementService.generateRiskReport(accountId);
 
       await reply.status(200).send({
@@ -481,7 +443,7 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to generate risk report', { error, accountId: request.params.accountId });
+      tradingLogger.error('Failed to generate risk report', { error, accountId: (request.params as { accountId: string }).accountId });
       await reply.status(500).send({
         success: false,
         error: 'Failed to generate risk report'
@@ -520,9 +482,9 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: GetRiskProfileRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId } = request.params;
+      const { accountId } = request.params as { accountId: string };
       const violations = await riskManagementService.validateRiskRules(accountId);
 
       // Calculate severity breakdown
@@ -541,7 +503,7 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to validate risk rules', { error, accountId: request.params.accountId });
+      tradingLogger.error('Failed to validate risk rules', { error, accountId: (request.params as { accountId: string }).accountId });
       await reply.status(500).send({
         success: false,
         error: 'Failed to validate risk rules'
@@ -573,9 +535,9 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: MonitoringRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId } = request.params;
+      const { accountId } = request.params as { accountId: string };
       await riskManagementService.startMonitoring(accountId);
 
       await reply.status(200).send({
@@ -584,7 +546,7 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to start risk monitoring', { error, accountId: request.params.accountId });
+      tradingLogger.error('Failed to start risk monitoring', { error, accountId: (request.params as { accountId: string }).accountId });
       await reply.status(500).send({
         success: false,
         error: 'Failed to start risk monitoring'
@@ -615,9 +577,9 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: MonitoringRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId } = request.params;
+      const { accountId } = request.params as { accountId: string };
       await riskManagementService.stopMonitoring(accountId);
 
       await reply.status(200).send({
@@ -626,7 +588,7 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to stop risk monitoring', { error, accountId: request.params.accountId });
+      tradingLogger.error('Failed to stop risk monitoring', { error, accountId: (request.params as { accountId: string }).accountId });
       await reply.status(500).send({
         success: false,
         error: 'Failed to stop risk monitoring'
@@ -677,10 +639,10 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
         }
       }
     }
-  }, async (request: EmergencyActionRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { accountId } = request.params;
-      const { action, percentage } = request.body;
+      const { accountId } = request.params as { accountId: string };
+      const { action, percentage } = request.body as { action: string; percentage?: number; };
 
       switch (action) {
         case 'stop_loss':
@@ -709,12 +671,12 @@ export async function riskManagementRoutes(app: FastifyInstance): Promise<void> 
     } catch (error) {
       tradingLogger.error('Emergency action failed', {
         error,
-        accountId: request.params.accountId,
-        action: request.body.action
+        accountId: (request.params as { accountId: string }).accountId,
+        action: (request.body as { action: string }).action
       });
       await reply.status(500).send({
         success: false,
-        error: `Emergency action failed: ${error.message}`
+        error: `Emergency action failed: ${(error as Error).message}`
       });
     }
   });
