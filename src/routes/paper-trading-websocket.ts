@@ -210,7 +210,7 @@ export async function paperTradingWebSocketRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     try {
       const stats = paperTradingWebSocket.getSubscriptionStats();
       return reply.send(stats);
@@ -238,7 +238,7 @@ export async function paperTradingWebSocketRoutes(app: FastifyInstance) {
         }
       }
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     try {
       paperTradingWebSocket.cleanup();
       websocketLogger.info('WebSocket subscriptions cleaned up');

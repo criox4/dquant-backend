@@ -23,23 +23,7 @@ const getUserConversationsSchema = z.object({
   limit: z.number().int().positive().max(100).default(20)
 });
 
-// Type definitions for API requests
-interface CreateConversationRequest extends FastifyRequest {
-  Body: z.infer<typeof createConversationSchema>;
-}
-
-interface SendMessageRequest extends FastifyRequest {
-  Params: { conversationId: string };
-  Body: z.infer<typeof sendMessageSchema>;
-}
-
-interface GetConversationRequest extends FastifyRequest {
-  Params: z.infer<typeof getConversationParamsSchema>;
-}
-
-interface GetUserConversationsRequest extends FastifyRequest {
-  Querystring: z.infer<typeof getUserConversationsSchema>;
-}
+// Type definitions removed - using FastifyRequest directly with type assertions
 
 const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
   // Register schemas for OpenAPI documentation
@@ -92,7 +76,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // POST /api/conversations - Create new conversation
-  fastify.post<CreateConversationRequest>('/conversations', {
+  fastify.post('/conversations', {
     schema: {
       summary: 'Create a new conversation',
       description: 'Creates a new conversation for a user',
@@ -117,7 +101,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-  }, async (request: CreateConversationRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const validatedData = createConversationSchema.parse(request.body);
 
@@ -154,7 +138,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // POST /api/conversations/:conversationId/messages - Send message
-  fastify.post<SendMessageRequest>('/conversations/:conversationId/messages', {
+  fastify.post('/conversations/:conversationId/messages', {
     schema: {
       summary: 'Send a message to a conversation',
       description: 'Sends a user message and gets AI response',
@@ -185,9 +169,9 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-  }, async (request: SendMessageRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { conversationId } = request.params;
+      const { conversationId } = request.params as { conversationId: string };
       const validatedData = sendMessageSchema.parse(request.body);
 
       apiLogger.info('Processing message', {
@@ -216,7 +200,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
       });
     } catch (error) {
       apiLogger.error('Failed to process message', error as Error, {
-        conversationId: request.params.conversationId
+        conversationId: (request.params as any).conversationId
       });
 
       if ((error as Error).message.includes('not found')) {
@@ -242,7 +226,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /api/conversations/:conversationId - Get conversation details
-  fastify.get<GetConversationRequest>('/conversations/:conversationId', {
+  fastify.get('/conversations/:conversationId', {
     schema: {
       summary: 'Get conversation details',
       description: 'Retrieves conversation details and message history',
@@ -284,7 +268,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-  }, async (request: GetConversationRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { conversationId } = getConversationParamsSchema.parse(request.params);
 
@@ -318,7 +302,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /api/users/:userId/conversations - Get user conversations
-  fastify.get<GetUserConversationsRequest>('/users/:userId/conversations', {
+  fastify.get('/users/:userId/conversations', {
     schema: {
       summary: 'Get user conversations',
       description: 'Retrieves all conversations for a specific user',
@@ -355,9 +339,9 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-  }, async (request: GetUserConversationsRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { userId } = request.params;
+      const { userId } = request.params as { userId: string };
       const { limit = 20 } = getUserConversationsSchema.parse(request.query);
 
       apiLogger.info('Getting user conversations', { userId, limit });
@@ -382,7 +366,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // PUT /api/conversations/:conversationId/archive - Archive conversation
-  fastify.put<GetConversationRequest>('/conversations/:conversationId/archive', {
+  fastify.put('/conversations/:conversationId/archive', {
     schema: {
       summary: 'Archive a conversation',
       description: 'Archives a conversation to remove it from active conversations',
@@ -404,7 +388,7 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-  }, async (request: GetConversationRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { conversationId } = getConversationParamsSchema.parse(request.params);
 

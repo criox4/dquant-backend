@@ -49,6 +49,7 @@
     "@commitlint/cli": "^18.4.3",
     "@commitlint/config-conventional": "^18.4.3",
     "@types/jest": "^29.5.8",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.5",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^9.0.7",

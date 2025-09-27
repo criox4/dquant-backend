@@ -7,68 +7,20 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { binanceLiveTradingService } from '@/services/binance-live-trading';
 import { tradingLogger } from '@/services/logger';
 import {
-  LiveOrderParams,
-  LivePositionRequest,
-  LiveBalanceRequest,
-  LiveTradingEventType
+  LiveOrderParams
 } from '@/types/live-trading';
 
-// Request/Response Types
-interface LiveBalanceRequest extends FastifyRequest {
-  Querystring: {
-    type?: 'spot' | 'future' | 'margin';
-    currency?: string;
-  };
-}
+// Request/Response Types removed - using FastifyRequest directly
 
-interface CreateOrderRequest extends FastifyRequest {
-  Body: {
-    symbol: string;
-    type: 'market' | 'limit' | 'stop' | 'stop_limit';
-    side: 'buy' | 'sell';
-    amount: number;
-    price?: number;
-    stopPrice?: number;
-    timeInForce?: 'GTC' | 'IOC' | 'FOK';
-    reduceOnly?: boolean;
-    postOnly?: boolean;
-    clientOrderId?: string;
-    leverageRate?: number;
-    marginMode?: 'cross' | 'isolated';
-  };
-}
+// CreateOrderRequest interface removed - using FastifyRequest directly
 
-interface CancelOrderRequest extends FastifyRequest {
-  Params: {
-    orderId: string;
-  };
-  Querystring: {
-    symbol: string;
-  };
-}
+// CancelOrderRequest interface removed - using FastifyRequest directly
 
-interface GetOrderRequest extends FastifyRequest {
-  Params: {
-    orderId: string;
-  };
-  Querystring: {
-    symbol: string;
-  };
-}
+// GetOrderRequest interface removed - using FastifyRequest directly
 
-interface GetOrdersRequest extends FastifyRequest {
-  Querystring: {
-    symbol?: string;
-    since?: number;
-    limit?: number;
-  };
-}
+// GetOrdersRequest interface removed - using FastifyRequest directly
 
-interface GetPositionsRequest extends FastifyRequest {
-  Querystring: {
-    symbols?: string;
-  };
-}
+// GetPositionsRequest interface removed - using FastifyRequest directly
 
 interface GetPositionRequest extends FastifyRequest {
   Params: {
@@ -184,7 +136,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get system status', { error: error.message });
+      tradingLogger.error('Failed to get system status', { error: (error as Error).message });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve system status'
@@ -221,10 +173,10 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to connect to exchange', { error: error.message });
+      tradingLogger.error('Failed to connect to exchange', { error: (error as Error).message });
       await reply.status(500).send({
         success: false,
-        error: error.message
+        error: (error as Error).message
       });
     }
   });
@@ -258,10 +210,10 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to disconnect from exchange', { error: error.message });
+      tradingLogger.error('Failed to disconnect from exchange', { error: (error as Error).message });
       await reply.status(500).send({
         success: false,
-        error: error.message
+        error: (error as Error).message
       });
     }
   });
@@ -298,9 +250,9 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: LiveBalanceRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { type, currency } = request.query;
+      const { type, currency } = request.query as { type?: 'spot' | 'future' | 'margin', currency?: string };
       const balance = await binanceLiveTradingService.getBalance({ type, currency });
 
       await reply.status(200).send({
@@ -309,7 +261,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get balance', { error: error.message });
+      tradingLogger.error('Failed to get balance', { error: (error as Error).message });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve balance'
@@ -356,7 +308,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get account info', { error: error.message });
+      tradingLogger.error('Failed to get account info', { error: (error as Error).message });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve account information'
@@ -415,21 +367,22 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: CreateOrderRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const body = request.body as any;
       const orderParams: LiveOrderParams = {
-        symbol: request.body.symbol,
-        type: request.body.type,
-        side: request.body.side,
-        amount: request.body.amount,
-        price: request.body.price,
-        stopPrice: request.body.stopPrice,
-        timeInForce: request.body.timeInForce,
-        reduceOnly: request.body.reduceOnly,
-        postOnly: request.body.postOnly,
-        clientOrderId: request.body.clientOrderId,
-        leverageRate: request.body.leverageRate,
-        marginMode: request.body.marginMode
+        symbol: body.symbol,
+        type: body.type,
+        side: body.side,
+        amount: body.amount,
+        price: body.price,
+        stopPrice: body.stopPrice,
+        timeInForce: body.timeInForce,
+        reduceOnly: body.reduceOnly,
+        postOnly: body.postOnly,
+        clientOrderId: body.clientOrderId,
+        leverageRate: body.leverageRate,
+        marginMode: body.marginMode
       };
 
       const order = await binanceLiveTradingService.createOrder(orderParams);
@@ -440,16 +393,16 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to create order', { error: error.message, body: request.body });
+      tradingLogger.error('Failed to create order', { error: (error as Error).message, body: request.body });
 
       let statusCode = 500;
-      if (error.name === 'RiskManagementError') statusCode = 400;
-      else if (error.name === 'InsufficientFundsError') statusCode = 400;
-      else if (error.name === 'InvalidOrderError') statusCode = 400;
+      if ((error as Error).name === 'RiskManagementError') statusCode = 400;
+      else if ((error as Error).name === 'InsufficientFundsError') statusCode = 400;
+      else if ((error as Error).name === 'InvalidOrderError') statusCode = 400;
 
       await reply.status(statusCode).send({
         success: false,
-        error: error.message
+        error: (error as Error).message
       });
     }
   });
@@ -485,10 +438,10 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: CancelOrderRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { orderId } = request.params;
-      const { symbol } = request.query;
+      const { orderId } = request.params as { orderId: string };
+      const { symbol } = request.query as { symbol: string };
 
       const order = await binanceLiveTradingService.cancelOrder(orderId, symbol);
 
@@ -498,7 +451,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to cancel order', { error: error.message, params: request.params });
+      tradingLogger.error('Failed to cancel order', { error: (error as Error).message, params: request.params });
       await reply.status(500).send({
         success: false,
         error: 'Failed to cancel order'
@@ -537,10 +490,10 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetOrderRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { orderId } = request.params;
-      const { symbol } = request.query;
+      const { orderId } = request.params as { orderId: string };
+      const { symbol } = request.query as { symbol: string };
 
       const order = await binanceLiveTradingService.getOrder(orderId, symbol);
 
@@ -550,7 +503,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get order', { error: error.message, params: request.params });
+      tradingLogger.error('Failed to get order', { error: (error as Error).message, params: request.params });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve order'
@@ -583,9 +536,9 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetOrdersRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol, since, limit } = request.query;
+      const { symbol, since, limit } = request.query as { symbol?: string, since?: number, limit?: number };
       const orders = await binanceLiveTradingService.getOrders(symbol, since, limit);
 
       await reply.status(200).send({
@@ -594,7 +547,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get orders', { error: error.message, query: request.query });
+      tradingLogger.error('Failed to get orders', { error: (error as Error).message, query: request.query });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve orders'
@@ -625,9 +578,9 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetOrdersRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol } = request.query;
+      const { symbol } = request.query as { symbol?: string };
       const orders = await binanceLiveTradingService.getOpenOrders(symbol);
 
       await reply.status(200).send({
@@ -636,7 +589,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get open orders', { error: error.message, query: request.query });
+      tradingLogger.error('Failed to get open orders', { error: (error as Error).message, query: request.query });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve open orders'
@@ -667,9 +620,9 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetPositionsRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbols } = request.query;
+      const { symbols } = request.query as { symbols?: string };
       const symbolList = symbols ? symbols.split(',') : undefined;
       const positions = await binanceLiveTradingService.getPositions(symbolList);
 
@@ -679,7 +632,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get positions', { error: error.message, query: request.query });
+      tradingLogger.error('Failed to get positions', { error: (error as Error).message, query: request.query });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve positions'
@@ -711,9 +664,9 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
         }
       }
     }
-  }, async (request: GetPositionRequest, reply: FastifyReply) => {
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { symbol } = request.params;
+      const { symbol } = request.params as { symbol: string };
       const position = await binanceLiveTradingService.getPosition(symbol);
 
       await reply.status(200).send({
@@ -722,7 +675,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get position', { error: error.message, params: request.params });
+      tradingLogger.error('Failed to get position', { error: (error as Error).message, params: request.params });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve position'
@@ -778,12 +731,12 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to set leverage', { error: error.message, params: request.params, body: request.body });
+      tradingLogger.error('Failed to set leverage', { error: (error as Error).message, params: request.params, body: request.body });
 
-      const statusCode = error.name === 'RiskManagementError' ? 400 : 500;
+      const statusCode = (error as Error).name === 'RiskManagementError' ? 400 : 500;
       await reply.status(statusCode).send({
         success: false,
-        error: error.message
+        error: (error as Error).message
       });
     }
   });
@@ -836,7 +789,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to set margin mode', { error: error.message, params: request.params, body: request.body });
+      tradingLogger.error('Failed to set margin mode', { error: (error as Error).message, params: request.params, body: request.body });
       await reply.status(500).send({
         success: false,
         error: 'Failed to set margin mode'
@@ -879,7 +832,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get ticker', { error: error.message, params: request.params });
+      tradingLogger.error('Failed to get ticker', { error: (error as Error).message, params: request.params });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve ticker'
@@ -922,7 +875,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get tickers', { error: error.message, query: request.query });
+      tradingLogger.error('Failed to get tickers', { error: (error as Error).message, query: request.query });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve tickers'
@@ -972,7 +925,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get order book', { error: error.message, params: request.params });
+      tradingLogger.error('Failed to get order book', { error: (error as Error).message, params: request.params });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve order book'
@@ -1025,7 +978,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get candles', { error: error.message, params: request.params, query: request.query });
+      tradingLogger.error('Failed to get candles', { error: (error as Error).message, params: request.params, query: request.query });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve candles'
@@ -1060,7 +1013,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get stats', { error: error.message });
+      tradingLogger.error('Failed to get stats', { error: (error as Error).message });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve trading statistics'
@@ -1104,7 +1057,7 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
       });
 
     } catch (error) {
-      tradingLogger.error('Failed to get trades', { error: error.message, query: request.query });
+      tradingLogger.error('Failed to get trades', { error: (error as Error).message, query: request.query });
       await reply.status(500).send({
         success: false,
         error: 'Failed to retrieve trades'

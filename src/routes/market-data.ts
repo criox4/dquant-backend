@@ -235,7 +235,7 @@ async function marketDataRoutes(app: FastifyInstance): Promise<void> {
         }
       }
     }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  }, async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       const symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'ADA/USDT', 'DOT/USDT'];
       const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'];
@@ -285,7 +285,7 @@ async function marketDataRoutes(app: FastifyInstance): Promise<void> {
         }
       }
     }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  }, async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       const stats = marketDataService.getStats();
 
@@ -476,7 +476,7 @@ async function marketDataRoutes(app: FastifyInstance): Promise<void> {
         }
       }
     }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  }, async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       const subscriptions = marketDataService.getActiveSubscriptions();
 
