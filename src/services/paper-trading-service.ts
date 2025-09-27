@@ -18,6 +18,7 @@ import {
 } from '@/types/paper-trading';
 import { prisma } from '@/config/database';
 import { marketDataService } from '@/services/market-data';
+import { paperTradingWebSocket } from '@/services/paper-trading-websocket';
 import { apiLogger, tradingLogger } from '@/services/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -202,13 +203,25 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
       }
 
       // Update position in database
-      await prisma.paperPosition.update({
+      const updatedPosition = await prisma.paperPosition.update({
         where: { id: position.id },
         data: {
           currentPrice: newPrice,
           unrealizedPnl: unrealizedPnL
         }
       });
+
+      // Broadcast position update via WebSocket
+      const mappedPosition = this.mapDbPositionToPosition(updatedPosition);
+      const priceChange = newPrice - (this.priceCache.get(position.symbol) || newPrice);
+      const pnlChange = unrealizedPnL - parseFloat(position.unrealizedPnl?.toString() || '0');
+
+      await paperTradingWebSocket.broadcastPositionUpdate(
+        position.accountId,
+        mappedPosition,
+        priceChange,
+        pnlChange
+      );
 
       // Check for stop loss / take profit triggers
       await this.checkRiskLevels(position, newPrice);
@@ -550,6 +563,11 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
         await this.executeOrderInDatabase(dbOrder, currentPrice);
       }
 
+      const mappedOrder = this.mapDbOrderToOrder(dbOrder);
+
+      // Broadcast order update via WebSocket
+      await paperTradingWebSocket.broadcastOrderUpdate(accountId, mappedOrder);
+
       tradingLogger.info('Paper order created', {
         orderId,
         accountId,
@@ -558,7 +576,7 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
         quantity: orderData.quantity
       });
 
-      return this.mapDbOrderToOrder(dbOrder);
+      return mappedOrder;
     } catch (error) {
       tradingLogger.error('Error creating order', error as Error);
       throw error;
@@ -579,7 +597,7 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
     await new Promise(resolve => setTimeout(resolve, this.config.orderExecutionDelay));
 
     // Update order as filled
-    await prisma.paperOrder.update({
+    const updatedOrder = await prisma.paperOrder.update({
       where: { id: dbOrder.id },
       data: {
         status: 'FILLED',
@@ -591,11 +609,19 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
       }
     });
 
+    // Broadcast order execution via WebSocket
+    const mappedOrder = this.mapDbOrderToOrder(updatedOrder);
+    await paperTradingWebSocket.broadcastOrderUpdate(dbOrder.accountId, mappedOrder);
+
     // Create or update position
     await this.createOrUpdatePosition(dbOrder, finalPrice, amount, commission);
 
-    // Update account balance
+    // Update account balance and broadcast account update
     await this.updateAccountBalance(dbOrder.accountId, -commission);
+    const updatedAccount = await this.getAccount(dbOrder.accountId);
+    if (updatedAccount) {
+      await paperTradingWebSocket.broadcastAccountUpdate(dbOrder.accountId, updatedAccount);
+    }
   }
 
   /**
@@ -701,7 +727,7 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
       realizedPnL = (entryPrice - closePrice) * size - fees;
     }
 
-    await prisma.paperPosition.update({
+    const updatedPosition = await prisma.paperPosition.update({
       where: { id: position.id },
       data: {
         status: 'CLOSED',
@@ -710,8 +736,36 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
       }
     });
 
-    // Update account with realized P&L
+    // Create trade record for the closure
+    const trade: PaperTrade = {
+      id: `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      accountId: position.accountId,
+      positionId: position.positionId,
+      symbol: position.symbol,
+      side: position.side === 'LONG' ? 'SELL' : 'BUY',
+      quantity: size,
+      price: closePrice,
+      commission: 0,
+      realizedPnL,
+      timestamp: new Date(),
+      strategyId: position.strategyId
+    };
+
+    // Broadcast trade execution via WebSocket
+    const mappedPosition = this.mapDbPositionToPosition(updatedPosition);
+    await paperTradingWebSocket.broadcastTradeExecution(
+      position.accountId,
+      trade,
+      mappedPosition,
+      undefined // newBalance will be calculated
+    );
+
+    // Update account with realized P&L and broadcast account update
     await this.updateAccountBalance(position.accountId, realizedPnL);
+    const updatedAccount = await this.getAccount(position.accountId);
+    if (updatedAccount) {
+      await paperTradingWebSocket.broadcastAccountUpdate(position.accountId, updatedAccount);
+    }
   }
 
   /**
@@ -1040,7 +1094,12 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
   }
 
   async updatePortfolioValue(accountId: string): Promise<PaperPortfolio> {
-    return this.getPortfolio(accountId);
+    const portfolio = await this.getPortfolio(accountId);
+
+    // Broadcast portfolio update via WebSocket
+    await paperTradingWebSocket.broadcastPortfolioUpdate(accountId, portfolio);
+
+    return portfolio;
   }
 
   async calculateMarginLevel(accountId: string): Promise<number> {
