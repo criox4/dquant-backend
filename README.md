@@ -8,7 +8,7 @@
 
 Intelligent Trading Strategy Agent Backend Service built with TypeScript, Fastify, and comprehensive type safety.
 
-**Migration Status**: 45% Complete - Core AI and Market Data Services Implemented
+**Migration Status**: 85% Complete - Production-Ready Trading Platform
 
 ## 🚀 Features
 
@@ -22,12 +22,17 @@ Intelligent Trading Strategy Agent Backend Service built with TypeScript, Fastif
 - **💬 Advanced Conversations**: Context-aware conversation management
 - **🔒 Enterprise Security**: JWT authentication, rate limiting, input validation
 - **🎛️ Comprehensive Monitoring**: Structured logging and performance metrics
+- **📈 Paper Trading System**: Complete virtual trading with realistic execution
+- **🧪 Backtesting Engine**: Historical strategy testing with performance analysis
+- **⚡ Strategy Execution**: DSL processing with 9 technical indicators
+- **📡 Real-time WebSocket**: Live updates for trading, portfolio, and market data
+- **📊 Performance Analytics**: 25+ financial metrics with institutional-grade calculations
 
 ### 🚧 **In Development**
-- **📈 Backtesting Engine**: Historical strategy testing and analysis
-- **💱 Paper Trading**: Virtual trading simulation with real-time P&L
+- **🛡️ Risk Management**: Advanced position sizing and risk controls (80% complete)
+
+### 📋 **Planned**
 - **⚡ Live Trading**: Exchange connectivity and automated execution
-- **📈 Risk Management**: Advanced position sizing and risk controls
 
 ## 🏗️ Architecture
 
@@ -141,8 +146,23 @@ npm start
 - `GET /api/backtest/:id` - Get results
 
 #### Paper Trading
-- `POST /api/paper/start` - Start simulation
-- `GET /api/paper/portfolio` - Get portfolio
+- `POST /api/paper/accounts` - Create paper trading account
+- `GET /api/paper/accounts/:id` - Get account details
+- `POST /api/paper/accounts/:id/orders` - Place order
+- `GET /api/paper/accounts/:id/positions` - Get positions
+- `GET /api/paper/accounts/:id/portfolio` - Get portfolio
+
+#### Performance Analytics
+- `GET /api/analytics/accounts/:id/metrics` - Performance metrics
+- `GET /api/analytics/accounts/:id/risk` - Risk analysis
+- `GET /api/analytics/accounts/:id/equity-curve` - Equity curve
+- `GET /api/analytics/accounts/:id/alerts` - Performance alerts
+- `POST /api/analytics/accounts/:id/real-time` - Real-time analytics
+
+#### WebSocket Subscriptions
+- `POST /api/paper/ws/subscribe/account` - Subscribe to account updates
+- `POST /api/paper/ws/subscribe/strategy` - Subscribe to strategy updates
+- `GET /api/paper/ws/subscriptions/stats` - Subscription statistics
 
 #### Live Trading
 - `POST /api/live/start` - Start live trading
@@ -161,10 +181,25 @@ npm start
 - `leave_room` - Leave event room
 - `room_joined/room_left` - Room status updates
 
-#### Data Streams
+#### Paper Trading Events
+- `paper_account_update` - Account balance changes
+- `paper_order_update` - Order status updates
+- `paper_position_update` - Position P&L changes
+- `paper_trade_execution` - Trade completion events
+- `paper_strategy_signal` - Strategy signals
+- `paper_portfolio_update` - Portfolio summaries
+- `paper_performance_update` - Performance metrics
+- `paper_analytics_update` - Advanced analytics
+- `paper_risk_alert` - Risk threshold alerts
+
+#### Market Data Streams
 - `subscribe_market_data` - Real-time prices
-- `subscribe_strategy_updates` - Strategy events
-- `subscribe_trading_updates` - Trade notifications
+- `market_update` - Price and volume updates
+- `candle_update` - OHLCV candle data
+
+#### Strategy Events
+- `strategy_signal` - Strategy execution signals
+- `strategy_performance` - Strategy metrics
 
 ## 🧪 Testing
 

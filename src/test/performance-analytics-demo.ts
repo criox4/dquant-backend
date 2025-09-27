@@ -44,7 +44,7 @@ export async function demonstratePerformanceAnalytics() {
     const riskMetrics = await performanceAnalyticsService.calculateRiskMetrics(accountId);
 
     console.log(`📉 Current Drawdown: ${(riskMetrics.currentDrawdown * 100).toFixed(2)}%`);
-    console.log(`📊 Sortino Ratio: ${(riskMetrics.sortinRatio).toFixed(3)}`);
+    console.log(`📊 Sortino Ratio: ${riskMetrics.sortinRatio?.toFixed(3) || 'N/A'}`);
     console.log(`💰 VaR (95%): ${riskMetrics.var95.toFixed(4)}`);
     console.log(`💸 CVaR (95%): ${riskMetrics.cvar95.toFixed(4)}`);
     console.log(`📊 Downward Volatility: ${(riskMetrics.downwardVolatility * 100).toFixed(2)}%`);
@@ -85,12 +85,14 @@ export async function demonstratePerformanceAnalytics() {
 
     if (rollingMetrics.length > 0) {
       const latest = rollingMetrics[rollingMetrics.length - 1];
-      console.log(`📊 Latest 30-day Performance:`);
-      console.log(`  💰 Returns: $${latest.returns.toFixed(2)}`);
-      console.log(`  📈 Sharpe: ${latest.sharpeRatio.toFixed(3)}`);
-      console.log(`  📉 Max DD: $${latest.maxDrawdown.toFixed(2)}`);
-      console.log(`  🎯 Win Rate: ${(latest.winRate * 100).toFixed(1)}%`);
-      console.log(`  📊 Volatility: ${(latest.volatility * 100).toFixed(2)}%`);
+      if (latest) {
+        console.log(`📊 Latest 30-day Performance:`);
+        console.log(`  💰 Returns: $${latest.returns.toFixed(2)}`);
+        console.log(`  📈 Sharpe: ${latest.sharpeRatio.toFixed(3)}`);
+        console.log(`  📉 Max DD: $${latest.maxDrawdown.toFixed(2)}`);
+        console.log(`  🎯 Win Rate: ${(latest.winRate * 100).toFixed(1)}%`);
+        console.log(`  📊 Volatility: ${(latest.volatility * 100).toFixed(2)}%`);
+      }
     }
 
     // 6. Check performance alerts

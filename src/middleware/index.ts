@@ -118,7 +118,7 @@ export async function setupMiddleware(app: FastifyInstance): Promise<void> {
       requestLogger.warn('Slow request detected', {
         method: request.method,
         url: request.url,
-        responseTime: `${responseTime}ms`,
+        responseTime,
         statusCode: reply.statusCode,
         userId: request.requestContext?.userId
       });
