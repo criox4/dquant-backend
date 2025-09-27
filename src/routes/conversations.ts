@@ -1,6 +1,8 @@
 import { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import { conversationManager } from '@/services/conversation-manager';
 import { apiLogger } from '@/services/logger';
+import { aiOrchestrator } from '@/services/ai-orchestrator';
+import { broadcastToRoom, broadcastToUser } from '@/websocket/server';
 import { z } from 'zod';
 
 // Zod schemas for request validation
@@ -180,18 +182,37 @@ const conversationsRoutes: FastifyPluginAsync = async (fastify) => {
         streamResponse: validatedData.streamResponse
       });
 
-      const response = await conversationManager.processMessage(
+      // Use AI orchestrator for intelligent multi-step task execution
+      const userId = 'user-1'; // TODO: Get from JWT token
+      const response = await aiOrchestrator.process({
         conversationId,
-        validatedData.message
-      );
+        userId,
+        userMessage: validatedData.message,
+        sendEvent: (event: string, payload: any) => {
+          // Emit events via WebSocket for real-time notifications
+          apiLogger.info('AI orchestrator event:', { event, payload });
 
-      // If streaming is requested, stream the response
+          // Broadcast to user and conversation room
+          const websocketEvent = {
+            event,
+            data: payload,
+            timestamp: new Date().toISOString()
+          };
+
+          broadcastToUser(userId, websocketEvent).catch(error => {
+            apiLogger.warn('Failed to broadcast AI event to user:', error);
+          });
+
+          broadcastToRoom(`conversation_${conversationId}`, websocketEvent).catch(error => {
+            apiLogger.warn('Failed to broadcast AI event to conversation room:', error);
+          });
+        }
+      });
+
+      // If streaming is requested, handle streaming
       if (validatedData.streamResponse) {
-        await conversationManager.streamResponse(
-          conversationId,
-          response.message,
-          response.metadata
-        );
+        // TODO: Implement streaming response for AI orchestrator
+        apiLogger.info('Streaming requested but not yet implemented for AI orchestrator');
       }
 
       return reply.send({

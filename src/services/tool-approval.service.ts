@@ -8,6 +8,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 import { apiLogger } from './logger';
+import { broadcastToUser, broadcastToRoom } from '@/websocket/server';
 
 export interface PendingToolCall {
   callId: string;
@@ -104,6 +105,24 @@ class ToolApprovalService extends EventEmitter {
     // Emit event for real-time notifications
     this.emit('toolCallRequested', this.toPublic(entry));
 
+    // Broadcast to user via WebSocket
+    broadcastToUser(userId, {
+      event: 'tool_call_requested',
+      data: this.toPublic(entry),
+      timestamp: new Date().toISOString()
+    }).catch(error => {
+      apiLogger.warn('Failed to broadcast tool call request:', error);
+    });
+
+    // Also broadcast to conversation room
+    broadcastToRoom(`conversation_${conversationId}`, {
+      event: 'tool_call_requested',
+      data: this.toPublic(entry),
+      timestamp: new Date().toISOString()
+    }).catch(error => {
+      apiLogger.warn('Failed to broadcast to conversation room:', error);
+    });
+
     return this.toPublic(entry);
   }
 
@@ -162,6 +181,21 @@ class ToolApprovalService extends EventEmitter {
     // Emit event for real-time notifications
     this.emit('toolCallApproved', { callId, decision });
 
+    // Broadcast approval to user and conversation
+    const approvalEvent = {
+      event: 'tool_call_approved',
+      data: { callId, decision, toolCall: this.toPublic(entry) },
+      timestamp: new Date().toISOString()
+    };
+
+    broadcastToUser(entry.userId, approvalEvent).catch(error => {
+      apiLogger.warn('Failed to broadcast tool call approval:', error);
+    });
+
+    broadcastToRoom(`conversation_${entry.conversationId}`, approvalEvent).catch(error => {
+      apiLogger.warn('Failed to broadcast approval to conversation room:', error);
+    });
+
     return this.toPublic(entry);
   }
 
@@ -193,6 +227,21 @@ class ToolApprovalService extends EventEmitter {
 
     // Emit event for real-time notifications
     this.emit('toolCallRejected', { callId, decision });
+
+    // Broadcast rejection to user and conversation
+    const rejectionEvent = {
+      event: 'tool_call_rejected',
+      data: { callId, decision, toolCall: this.toPublic(entry) },
+      timestamp: new Date().toISOString()
+    };
+
+    broadcastToUser(entry.userId, rejectionEvent).catch(error => {
+      apiLogger.warn('Failed to broadcast tool call rejection:', error);
+    });
+
+    broadcastToRoom(`conversation_${entry.conversationId}`, rejectionEvent).catch(error => {
+      apiLogger.warn('Failed to broadcast rejection to conversation room:', error);
+    });
 
     return this.toPublic(entry);
   }
