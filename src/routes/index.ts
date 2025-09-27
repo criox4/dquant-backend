@@ -8,6 +8,7 @@ import paperTradingRoutes from '@/routes/paper-trading';
 import { paperTradingWebSocketRoutes } from '@/routes/paper-trading-websocket';
 import performanceAnalyticsRoutes from '@/routes/performance-analytics';
 import { riskManagementRoutes } from '@/routes/risk-management';
+import liveTradingRoutes from '@/routes/live-trading';
 
 export async function setupRoutes(app: FastifyInstance): Promise<void> {
   try {
@@ -39,8 +40,8 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
       // Register risk management routes
       await app.register(riskManagementRoutes, { prefix: '/risk' });
 
-      // TODO: Register remaining route modules
-      // await app.register(liveRoutes, { prefix: '/live' });
+      // Register live trading routes
+      await app.register(liveTradingRoutes, { prefix: '/live' });
 
       // Temporary placeholder routes for testing
       app.get('/', {
