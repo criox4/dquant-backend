@@ -168,3 +168,11 @@ coverage/
 *.bakbackend-export.txt
 complete-typescript-backend-export.txt
 *.txt
+
+# Export and analysis files
+*export*.txt
+*analysis*.txt
+*comparison*.txt
+export-*.sh
+*.analysis
+*.comparison
