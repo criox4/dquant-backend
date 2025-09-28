@@ -165,4 +165,6 @@ coverage/
 
 # Backup files
 *.backup
-*.bak
+*.bakbackend-export.txt
+complete-typescript-backend-export.txt
+*.txt
