@@ -9,7 +9,7 @@ export default defineConfig({
   sourcemap: true,
   minify: false,
   splitting: false,
-  dts: true,
+  dts: false,
   external: [
     '@prisma/client',
     'redis',

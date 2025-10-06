@@ -19,7 +19,7 @@ const legacyCompatibilityRoutes: FastifyPluginAsync = async (fastify) => {
       description: 'Legacy endpoint redirected to /api/market/symbols',
       tags: ['Legacy Compatibility']
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     apiLogger.info('Legacy /api/symbols called, providing compatibility response');
 
     // Provide a compatibility response that matches legacy format
@@ -46,7 +46,7 @@ const legacyCompatibilityRoutes: FastifyPluginAsync = async (fastify) => {
       description: 'Legacy endpoint for trading status',
       tags: ['Legacy Compatibility']
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     apiLogger.info('Legacy /api/trading/status called, providing compatibility response');
 
     return reply.status(200).send({
@@ -69,7 +69,7 @@ const legacyCompatibilityRoutes: FastifyPluginAsync = async (fastify) => {
       description: 'Legacy endpoint redirected to /api/live/history',
       tags: ['Legacy Compatibility']
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     apiLogger.info('Legacy /api/trading/history called, providing compatibility response');
 
     return reply.status(200).send({
@@ -94,7 +94,7 @@ const legacyCompatibilityRoutes: FastifyPluginAsync = async (fastify) => {
       description: 'Legacy endpoint redirected to /api/tools',
       tags: ['Legacy Compatibility']
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     apiLogger.info('Legacy /api/tool-calls called, providing compatibility response');
 
     return reply.status(200).send({
@@ -114,7 +114,7 @@ const legacyCompatibilityRoutes: FastifyPluginAsync = async (fastify) => {
       description: 'Legacy endpoint redirected to /api/tools',
       tags: ['Legacy Compatibility']
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     apiLogger.info('Legacy POST /api/tool-calls called, providing compatibility response');
 
     return reply.status(201).send({
@@ -261,6 +261,47 @@ const legacyCompatibilityRoutes: FastifyPluginAsync = async (fastify) => {
         ]
       }
     });
+  });
+
+  // Paper trading legacy endpoint - account reset
+  // Legacy: POST /api/paper/account/reset -> New: POST /api/paper/accounts/:accountId/reset
+  fastify.post('/paper/account/reset', {
+    schema: {
+      summary: 'Reset paper trading account (legacy compatibility)',
+      description: 'Legacy endpoint redirected to /api/paper/accounts/:accountId/reset',
+      tags: ['Legacy Compatibility'],
+      body: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string' },
+          balance: { type: 'number', minimum: 1000 }
+        }
+      }
+    }
+  }, async (_request, reply) => {
+    // Legacy endpoint that just returns migration info - body is not used
+
+    apiLogger.info('Legacy /api/paper/account/reset called, redirecting to new endpoint');
+
+    try {
+      // Forward to paper trading service
+      // Note: In production, you'd need to get the actual accountId for the user
+      // For now, we'll return a message to use the new endpoint
+      return reply.status(200).send({
+        success: true,
+        message: 'Legacy endpoint - please use POST /api/paper/accounts/{accountId}/reset',
+        migrationInfo: {
+          oldEndpoint: 'POST /api/paper/account/reset',
+          newEndpoint: 'POST /api/paper/accounts/:accountId/reset',
+          note: 'The new endpoint requires an accountId. Use GET /api/paper/accounts to list your accounts.'
+        }
+      });
+    } catch (error) {
+      return reply.status(500).send({
+        success: false,
+        error: (error as Error).message
+      });
+    }
   });
 
   apiLogger.info('Legacy compatibility routes configured successfully');

@@ -220,7 +220,8 @@ export class ConversationManager {
       `;
 
       const response = await this.openRouterService.processConversation(
-        [{ role: 'user', content: intentPrompt }],
+        intentPrompt,
+        [],
         {
           model: 'claude-3.5-sonnet',
           maxTokens: 200,
@@ -228,9 +229,9 @@ export class ConversationManager {
         }
       );
 
-      if (response.success && response.data?.choices?.[0]?.message?.content) {
+      if (response?.response) {
         try {
-          const intentData = JSON.parse(response.data.choices[0].message.content);
+          const intentData = JSON.parse(response.response);
 
           return {
             type: intentData.intent,
@@ -254,7 +255,9 @@ export class ConversationManager {
       return this.simpleIntentClassification(message);
 
     } catch (error) {
-      apiLogger.warn('AI intent recognition failed, using fallback', error as Error);
+      apiLogger.warn('AI intent recognition failed, using fallback', {
+        error: error instanceof Error ? error.message : String(error)
+      });
       return this.simpleIntentClassification(message);
     }
   }
@@ -352,7 +355,7 @@ export class ConversationManager {
       "Welcome to DQuant! I can help you generate trading strategies, run backtests, and analyze market data. What's your trading goal?"
     ];
 
-    const response = responses[Math.floor(Math.random() * responses.length)];
+    const response = responses[Math.floor(Math.random() * responses.length)]!;
 
     return {
       message: response,
@@ -486,7 +489,7 @@ export class ConversationManager {
         - Backtesting and strategy validation
 
         Conversation history:
-        ${history.slice(-5).map(msg => `${msg.sender}: ${msg.content}`).join('\n')}
+        ${history.slice(-5).map(msg => `${msg.role}: ${msg.content}`).join('\n')}
 
         Current user question: "${message}"
 
@@ -494,7 +497,8 @@ export class ConversationManager {
       `;
 
       const response = await this.openRouterService.processConversation(
-        [{ role: 'user', content: contextualPrompt }],
+        contextualPrompt,
+        [],
         {
           model: 'claude-3.5-sonnet',
           maxTokens: 800,
@@ -502,8 +506,8 @@ export class ConversationManager {
         }
       );
 
-      if (response.success && response.data?.choices?.[0]?.message?.content) {
-        const aiResponse = response.data.choices[0].message.content;
+      if (response?.response) {
+        const aiResponse = response.response;
 
         return {
           message: aiResponse,
@@ -548,10 +552,11 @@ export class ConversationManager {
     let conversation = this.activeConversations.get(conversationId);
 
     if (!conversation) {
-      conversation = await this.conversationDataService.getConversation(conversationId);
-      if (conversation === null) {
+      const loadedConversation = await this.conversationDataService.getConversation(conversationId);
+      if (!loadedConversation) {
         throw new Error(`Conversation not found: ${conversationId}`);
       }
+      conversation = loadedConversation;
       this.activeConversations.set(conversationId, conversation);
     }
 

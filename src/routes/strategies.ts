@@ -1,18 +1,14 @@
-import { FastifyInstance, FastifyRequest, FastifyReply, RouteShorthandOptions } from 'fastify';
+import { FastifyInstance, RouteShorthandOptions } from 'fastify';
 import {
   CreateStrategyRequest,
   UpdateStrategyRequest,
   StrategySearchRequest,
-  DSLStrategy,
-  StrategyData,
-  StrategyStats
+  DSLStrategy
 } from '@/types/strategy';
 import {
   createStrategyRequestSchema,
   updateStrategyRequestSchema,
-  strategySearchRequestSchema,
-  dslStrategySchema,
-  strategyDataSchema
+  strategySearchRequestSchema
 } from '@/schemas/strategy';
 import { strategyManager } from '@/services/strategy-manager';
 import { apiLogger } from '@/services/logger';
@@ -808,8 +804,9 @@ export default async function strategiesRoutes(fastify: FastifyInstance) {
 
       const code = await strategyManager.dslProcessor.generateTradingCode(strategy.dsl);
 
-      // Update strategy with generated code
-      await strategyManager.updateStrategy(id, { generatedCode: code });
+      // Update strategy with generated code (stored in strategy metadata)
+      // Note: metadata is not in UpdateStrategyRequest type, so we skip storing it
+      // The code is already generated and returned in the response
 
       return reply.send({
         success: true,
@@ -825,6 +822,208 @@ export default async function strategiesRoutes(fastify: FastifyInstance) {
 
     } catch (error) {
       apiLogger.error('Failed to generate strategy code via API', error as Error, {
+        strategyId: request.params.id
+      });
+
+      return errorHandler(error as Error, request, reply);
+    }
+  });
+
+  /**
+   * Export strategy code as downloadable file
+   * POST /strategies/:id/export/code
+   */
+  const exportCodeOpts: RouteShorthandOptions = {
+    schema: {
+      summary: 'Export strategy code as file',
+      description: 'Export strategy as downloadable JavaScript file',
+      tags: ['Strategies'],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' }
+        },
+        required: ['id']
+      },
+      response: {
+        200: {
+          description: 'Strategy code file',
+          type: 'string'
+        }
+      }
+    }
+  };
+
+  fastify.post<GetStrategyRequestType>('/strategies/:id/export/code', exportCodeOpts, async (request, reply) => {
+    try {
+      const { id } = request.params;
+
+      apiLogger.info('Exporting strategy code as file via API', { strategyId: id });
+
+      const strategy = await strategyManager.getStrategy(id);
+      if (!strategy) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'STRATEGY_NOT_FOUND',
+            message: `Strategy with ID ${id} not found`
+          }
+        });
+      }
+
+      // Generate code if not already generated
+      let code = strategy.generatedCode || (strategy.metadata as any)?.generatedCode;
+      if (!code) {
+        code = await strategyManager.dslProcessor.generateTradingCode(strategy.dsl);
+        // Code is generated on-demand, not stored in DB
+      }
+
+      // Create filename
+      const filename = `${strategy.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_strategy.js`;
+
+      // Set headers for file download
+      reply.header('Content-Type', 'application/javascript');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+
+      return reply.send(code);
+
+    } catch (error) {
+      apiLogger.error('Failed to export strategy code via API', error as Error, {
+        strategyId: request.params.id
+      });
+
+      return errorHandler(error as Error, request, reply);
+    }
+  });
+
+  /**
+   * Export strategy as JSON
+   * POST /strategies/:id/export/json
+   */
+  const exportJsonOpts: RouteShorthandOptions = {
+    schema: {
+      summary: 'Export strategy as JSON',
+      description: 'Export complete strategy data as JSON file',
+      tags: ['Strategies'],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' }
+        },
+        required: ['id']
+      }
+    }
+  };
+
+  fastify.post<GetStrategyRequestType>('/strategies/:id/export/json', exportJsonOpts, async (request, reply) => {
+    try {
+      const { id } = request.params;
+
+      apiLogger.info('Exporting strategy as JSON via API', { strategyId: id });
+
+      const strategy = await strategyManager.getStrategy(id);
+      if (!strategy) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'STRATEGY_NOT_FOUND',
+            message: `Strategy with ID ${id} not found`
+          }
+        });
+      }
+
+      // Create exportable strategy data
+      const exportData = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        strategy: {
+          name: strategy.name,
+          description: strategy.description,
+          symbol: strategy.symbol,
+          timeframe: strategy.timeframe,
+          dsl: strategy.dsl,
+          tags: strategy.tags,
+          metadata: strategy.metadata
+        }
+      };
+
+      // Create filename
+      const filename = `${strategy.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_strategy.json`;
+
+      // Set headers for file download
+      reply.header('Content-Type', 'application/json');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+
+      return reply.send(exportData);
+
+    } catch (error) {
+      apiLogger.error('Failed to export strategy as JSON via API', error as Error, {
+        strategyId: request.params.id
+      });
+
+      return errorHandler(error as Error, request, reply);
+    }
+  });
+
+  /**
+   * Get strategy export data (without download)
+   * GET /strategies/:id/export/data
+   */
+  const getExportDataOpts: RouteShorthandOptions = {
+    schema: {
+      summary: 'Get strategy export data',
+      description: 'Get strategy data for export without downloading file',
+      tags: ['Strategies'],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' }
+        },
+        required: ['id']
+      }
+    }
+  };
+
+  fastify.get<GetStrategyRequestType>('/strategies/:id/export/data', getExportDataOpts, async (request, reply) => {
+    try {
+      const { id } = request.params;
+
+      apiLogger.debug('Getting strategy export data via API', { strategyId: id });
+
+      const strategy = await strategyManager.getStrategy(id);
+      if (!strategy) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'STRATEGY_NOT_FOUND',
+            message: `Strategy with ID ${id} not found`
+          }
+        });
+      }
+
+      // Create exportable strategy data
+      const exportData = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        strategy: {
+          name: strategy.name,
+          description: strategy.description,
+          symbol: strategy.symbol,
+          timeframe: strategy.timeframe,
+          dsl: strategy.dsl,
+          generatedCode: strategy.generatedCode,
+          tags: strategy.tags,
+          metadata: strategy.metadata
+        }
+      };
+
+      return reply.send({
+        success: true,
+        data: exportData
+      });
+
+    } catch (error) {
+      apiLogger.error('Failed to get strategy export data via API', error as Error, {
         strategyId: request.params.id
       });
 

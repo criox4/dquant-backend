@@ -293,6 +293,59 @@ export default async function paperTradingRoutes(app: FastifyInstance): Promise<
       }
     });
 
+    app.post('/accounts/:accountId/reset', {
+      schema: {
+        description: 'Reset paper trading account - clears all positions/orders and resets balance',
+        tags: ['Paper Trading'],
+        params: {
+          type: 'object',
+          required: ['accountId'],
+          properties: {
+            accountId: { type: 'string' }
+          }
+        },
+        body: {
+          type: 'object',
+          properties: {
+            balance: { type: 'number', minimum: 1000, description: 'New balance (defaults to initial balance)' }
+          }
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: { type: 'object' },
+              message: { type: 'string' }
+            }
+          }
+        }
+      }
+    }, async (request: FastifyRequest<{ Params: { accountId: string }; Body: { balance?: number } }>, reply: FastifyReply) => {
+      try {
+        const { accountId } = request.params;
+        const { balance } = request.body || {};
+
+        tradingLogger.info('Resetting paper trading account', { accountId, newBalance: balance });
+
+        const account = await paperTradingService.resetAccount(accountId, balance);
+
+        const response: PaperAccountResponse = {
+          success: true,
+          data: account,
+          message: 'Paper trading account reset successfully'
+        };
+
+        await reply.send(response);
+      } catch (error) {
+        apiLogger.error('Failed to reset paper trading account', error as Error);
+        await reply.status(500).send({
+          success: false,
+          message: (error as Error).message || 'Failed to reset paper trading account'
+        });
+      }
+    });
+
     app.get('/accounts/:accountId/portfolio', {
       schema: {
         description: 'Get paper trading portfolio',

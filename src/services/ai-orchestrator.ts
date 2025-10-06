@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { openRouterService } from './openrouter';
+import { openRouterService, ChatMessage } from './openrouter';
 import { conversationDataService } from './conversation-data';
 import { apiLogger } from './logger';
 import { toolRegistry, getTool, listToolDefinitions } from '@/tools/tool-registry';
@@ -98,7 +98,7 @@ class AIOrchestrator extends EventEmitter {
         throw new Error(`Conversation ${conversationId} not found`);
       }
 
-      const context = await conversationDataService.getMessages(conversationId, { limit: 20 });
+      const context = await conversationDataService.getConversationHistory(conversationId, 20);
       const conversationHistory = this.formatHistory(context || []);
 
       // Build system prompt and get available tools
@@ -124,10 +124,10 @@ class AIOrchestrator extends EventEmitter {
       };
 
       // Initial message array for LLM
-      const messages = [
-        { role: 'system', content: systemPrompt },
+      const messages: ChatMessage[] = [
+        { role: 'system' as const, content: systemPrompt },
         ...conversationHistory,
-        { role: 'user', content: userMessage },
+        { role: 'user' as const, content: userMessage },
       ];
 
       // Main orchestration loop
@@ -135,14 +135,13 @@ class AIOrchestrator extends EventEmitter {
         let response;
 
         try {
-          response = await openRouterService.chatWithTools({
-            messages,
+          response = await openRouterService.chatWithToolsRaw(messages, {
             tools: toolDefinitions,
             temperature: 0.6,
             maxTokens: 1200,
           });
         } catch (error) {
-          apiLogger.error('Tool orchestrator LLM call failed:', error);
+          apiLogger.error('Tool orchestrator LLM call failed', error as Error);
           return this.fallbackResponse(state, 'I ran into a problem talking to my reasoning engine. Could you try again in a moment?');
         }
 
@@ -166,7 +165,7 @@ class AIOrchestrator extends EventEmitter {
           // Process each tool call
           for (const toolCall of assistantMessage.tool_calls) {
             const toolName = toolCall.function?.name;
-            const toolCallId = toolCall.id || toolCall.tool_call_id || `tool_call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const toolCallId = toolCall.id || `tool_call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
             const tool = getTool(toolName);
             if (!tool) {
@@ -235,7 +234,7 @@ class AIOrchestrator extends EventEmitter {
                   };
                 }
               } catch (error) {
-                apiLogger.error('Tool approval workflow failed:', error);
+                apiLogger.error('Tool approval workflow failed', error as Error);
                 return {
                   message: `I encountered an error while seeking approval for ${tool.label}. Please try again.`,
                   metadata: {
@@ -305,7 +304,7 @@ class AIOrchestrator extends EventEmitter {
                   }
                   await this.runQuickBacktestIfNeeded({ state, sendEvent, messages });
                 } catch (quickError) {
-                  apiLogger.error('Quick backtest failed:', quickError);
+                  apiLogger.error('Quick backtest failed', quickError as Error);
                   sendEvent('quick_backtest_error', {
                     conversationId,
                     message: (quickError as Error).message,
@@ -330,7 +329,7 @@ class AIOrchestrator extends EventEmitter {
               });
 
             } catch (error) {
-              apiLogger.error(`Tool ${tool.name} execution failed:`, error);
+              apiLogger.error(`Tool ${tool.name} execution failed`, error as Error);
               sendEvent('tool_call_error', {
                 callId: toolCallId,
                 conversationId,
@@ -368,7 +367,7 @@ class AIOrchestrator extends EventEmitter {
       return this.buildFinalResponse(state);
 
     } catch (error) {
-      apiLogger.error('AI Orchestrator process failed:', error);
+      apiLogger.error('AI Orchestrator process failed', error as Error);
       return {
         message: 'I encountered an error while processing your request. Please try again.',
         metadata: {
@@ -382,11 +381,11 @@ class AIOrchestrator extends EventEmitter {
   /**
    * Format conversation history for LLM consumption
    */
-  private formatHistory(messages: any[]): Array<{ role: string; content: string }> {
+  private formatHistory(messages: any[]): Array<{ role: 'user' | 'assistant'; content: string }> {
     return messages
       .filter((msg) => msg.role === 'USER' || msg.role === 'ASSISTANT')
       .map((msg) => ({
-        role: msg.role === 'USER' ? 'user' : 'assistant',
+        role: (msg.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
         content: msg.content,
       }));
   }
@@ -435,7 +434,9 @@ Respond in friendly, professional English.`;
     try {
       return JSON.parse(args as string);
     } catch (error) {
-      apiLogger.warn('Failed to parse tool arguments, returning empty object:', error);
+      apiLogger.warn('Failed to parse tool arguments, returning empty object', {
+        error: error instanceof Error ? error.message : String(error)
+      });
       return {};
     }
   }
@@ -584,7 +585,7 @@ Respond in friendly, professional English.`;
         messages.push({ role: 'system', content: summaryContent });
       }
     } catch (error) {
-      apiLogger.error('Auto market analysis prerequisite failed:', error);
+      apiLogger.error('Auto market analysis prerequisite failed', error as Error);
       sendEvent('tool_call_error', {
         callId: autoCallId,
         conversationId: state.conversationId,
@@ -635,7 +636,7 @@ Respond in friendly, professional English.`;
         messages.push({ role: 'system', content: alert });
       }
     } catch (error) {
-      apiLogger.error('Quick backtest validation failed:', error);
+      apiLogger.error('Quick backtest validation failed', error as Error);
       state.quickCheckPerformed = true; // Don't retry on error
     }
   }

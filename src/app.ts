@@ -23,7 +23,7 @@ async function checkBinanceHealth(): Promise<boolean> {
     });
     return response.ok;
   } catch (error) {
-    logger.warn('Binance health check failed:', (error as Error).message);
+    logger.warn('Binance health check failed', { error: (error as Error).message });
     return false;
   }
 }
@@ -48,7 +48,7 @@ async function checkOpenRouterHealth(): Promise<boolean> {
     });
     return response.ok;
   } catch (error) {
-    logger.warn('OpenRouter health check failed:', (error as Error).message);
+    logger.warn('OpenRouter health check failed', { error: (error as Error).message });
     return false;
   }
 }

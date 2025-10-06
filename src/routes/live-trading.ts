@@ -1005,8 +1005,318 @@ export default async function liveTradingRoutes(app: FastifyInstance): Promise<v
     }
   });
 
+  // 21. Get Active Symbols
+  app.get('/active-symbols', {
+    schema: {
+      summary: 'Get active trading symbols',
+      description: 'Get symbols actively being used by running strategies',
+      tags,
+      response: {
+        200: {
+          description: 'Active symbols retrieved successfully',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            symbols: { type: 'array', items: { type: 'string' } },
+            count: { type: 'number' },
+            timestamp: { type: 'number' }
+          }
+        }
+      }
+    }
+  }, async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      // Get symbols from running strategies and open positions
+      const positions = await binanceLiveTradingService.getPositions();
+      const activeSymbols = positions
+        .filter(pos => Math.abs(pos.contracts || 0) > 0)
+        .map(pos => pos.symbol);
+
+      // Get unique symbols
+      const uniqueSymbols = [...new Set(activeSymbols)];
+
+      tradingLogger.info(`Active symbols request - found: ${uniqueSymbols.join(', ') || 'none'}`);
+
+      await reply.status(200).send({
+        success: true,
+        symbols: uniqueSymbols,
+        count: uniqueSymbols.length,
+        timestamp: Date.now()
+      });
+
+    } catch (error) {
+      tradingLogger.error('Failed to get active symbols', { error: (error as Error).message });
+      await reply.status(500).send({
+        success: false,
+        error: (error as Error).message,
+        symbols: [],
+        count: 0
+      });
+    }
+  });
+
+  // 22. Get Dashboard Data
+  app.get('/dashboard', {
+    schema: {
+      summary: 'Get complete dashboard data',
+      description: 'Retrieve comprehensive trading dashboard including balance, positions, orders, and strategies',
+      tags,
+      response: {
+        200: {
+          description: 'Dashboard data retrieved successfully',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            dashboard: { type: 'object' }
+          }
+        }
+      }
+    }
+  }, async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      // Fetch all dashboard data in parallel
+      const [
+        accountInfo,
+        positions,
+        openOrders,
+        recentTrades
+      ] = await Promise.all([
+        binanceLiveTradingService.getAccount(),
+        binanceLiveTradingService.getPositions(),
+        binanceLiveTradingService.getOpenOrders(),
+        binanceLiveTradingService.getMyTrades(undefined, undefined, 10)
+      ]);
+
+      const totalPnl = positions.reduce((sum: number, pos: any) => sum + (pos.unrealizedPnl || 0), 0);
+      const positionValue = positions.reduce((sum: number, pos: any) => sum + Math.abs(pos.notional || 0), 0);
+
+      const dashboardData = {
+        balance: {
+          totalWalletBalance: accountInfo.balance.totalWalletBalance,
+          totalMarginBalance: accountInfo.balance.totalMarginBalance,
+          availableBalance: accountInfo.balance.availableBalance,
+          totalPnl,
+          positionValue
+        },
+        positions: positions.map((pos: any) => ({
+          symbol: pos.symbol,
+          side: pos.side,
+          size: pos.contracts,
+          notional: pos.notional,
+          entryPrice: pos.entryPrice,
+          markPrice: pos.markPrice,
+          unrealizedPnl: pos.unrealizedPnl,
+          percentage: pos.percentage
+        })),
+        strategies: [], // TODO: Implement strategy status tracking
+        recentTrades: recentTrades.slice(0, 10).map((trade: any) => ({
+          timestamp: trade.timestamp,
+          symbol: trade.symbol,
+          side: trade.side,
+          amount: trade.amount,
+          price: trade.price,
+          pnl: 0 // TODO: Calculate P&L
+        })),
+        orders: openOrders.map((order: any) => ({
+          id: order.id,
+          symbol: order.symbol,
+          side: order.side,
+          type: order.type,
+          amount: order.amount,
+          price: order.price,
+          status: order.status
+        })),
+        fundingRates: [], // TODO: Implement funding rate tracking
+        summary: {
+          totalPositions: positions.length,
+          totalOrders: openOrders.length,
+          runningStrategies: 0, // TODO: Track running strategies
+          totalPnl,
+          positionValue,
+          marginLevel: 1.0, // TODO: Calculate margin level from account info
+          canTrade: accountInfo.isActive
+        },
+        lastUpdate: Date.now()
+      };
+
+      await reply.status(200).send({
+        success: true,
+        dashboard: dashboardData
+      });
+
+    } catch (error) {
+      tradingLogger.error('Failed to get dashboard data', { error: (error as Error).message });
+      await reply.status(500).send({
+        success: false,
+        error: (error as Error).message
+      });
+    }
+  });
+
+  // 23. Get Performance Data
+  app.get('/performance', {
+    schema: {
+      summary: 'Get live trading performance',
+      description: 'Get performance data including equity curve and metrics',
+      tags,
+      response: {
+        200: {
+          description: 'Performance data retrieved successfully',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            performance: { type: 'object' }
+          }
+        }
+      }
+    }
+  }, async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      // Get current account info
+      const accountInfo = await binanceLiveTradingService.getAccount();
+
+      // Calculate basic metrics
+      const currentBalance = accountInfo.balance.totalWalletBalance || 10000;
+      const initialBalance = 10000; // TODO: Store and track initial balance
+      const totalPnl = currentBalance - initialBalance;
+      const totalPnlPercentage = initialBalance > 0 ? (totalPnl / initialBalance) * 100 : 0;
+
+      // Build equity curve (simplified - should come from historical data)
+      const equityCurve = [{
+        timestamp: Date.now(),
+        balance: currentBalance,
+        pnl: totalPnl,
+        time: new Date().toISOString()
+      }];
+
+      // Calculate max drawdown (simplified)
+      const maxDrawdown = 0; // TODO: Calculate from historical equity curve
+
+      const performance = {
+        currentBalance,
+        initialBalance,
+        totalPnl,
+        totalPnlPercentage,
+        maxDrawdown,
+        equityCurve,
+        trades: 0, // TODO: Track total trades
+        winRate: 0, // TODO: Calculate win rate
+        profitFactor: 0, // TODO: Calculate profit factor
+        sharpeRatio: 0, // TODO: Calculate Sharpe ratio
+        lastUpdate: Date.now()
+      };
+
+      await reply.status(200).send({
+        success: true,
+        performance
+      });
+
+    } catch (error) {
+      tradingLogger.error('Failed to get performance data', { error: (error as Error).message });
+      await reply.status(500).send({
+        success: false,
+        error: (error as Error).message,
+        performance: {
+          currentBalance: 10000,
+          initialBalance: 10000,
+          totalPnl: 0,
+          totalPnlPercentage: 0,
+          maxDrawdown: 0,
+          equityCurve: [{
+            timestamp: Date.now(),
+            balance: 10000,
+            pnl: 0,
+            time: new Date().toISOString()
+          }],
+          trades: 0,
+          winRate: 0,
+          profitFactor: 0,
+          sharpeRatio: 0,
+          lastUpdate: Date.now()
+        }
+      });
+    }
+  });
+
+  // 24. Close Position (POST method for compatibility)
+  app.post('/close-position', {
+    schema: {
+      summary: 'Close a position',
+      description: 'Close an open position (full or partial)',
+      tags,
+      body: {
+        type: 'object',
+        required: ['symbol'],
+        properties: {
+          symbol: { type: 'string', description: 'Symbol to close' },
+          percentage: { type: 'number', minimum: 0, maximum: 100, description: 'Percentage to close (default: 100)' }
+        }
+      },
+      response: {
+        200: {
+          description: 'Position closed successfully',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' },
+            data: { type: 'object' }
+          }
+        }
+      }
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { symbol, percentage = 100 } = request.body as { symbol: string; percentage?: number };
+
+      // Get current position
+      const positions = await binanceLiveTradingService.getPositions([symbol]);
+      const position = positions.find((p: any) => p.symbol === symbol);
+
+      if (!position || !position.contracts || position.contracts === 0) {
+        await reply.status(404).send({
+          success: false,
+          error: 'No open position found for this symbol'
+        });
+        return;
+      }
+
+      // Calculate quantity to close
+      const quantityToClose = Math.abs(position.contracts) * (percentage / 100);
+      const closeSide = position.side === 'long' ? 'sell' : 'buy';
+
+      // Place market order to close position
+      const closeOrder = await binanceLiveTradingService.createOrder({
+        symbol,
+        side: closeSide,
+        type: 'market',
+        amount: quantityToClose,
+        reduceOnly: true
+      });
+
+      tradingLogger.info('Position closed', { symbol, percentage, orderId: closeOrder.id });
+
+      await reply.status(200).send({
+        success: true,
+        message: `${percentage}% of position closed successfully`,
+        data: {
+          symbol,
+          closedPercentage: percentage,
+          closedQuantity: quantityToClose,
+          order: closeOrder
+        }
+      });
+
+    } catch (error) {
+      tradingLogger.error('Failed to close position', { error: (error as Error).message, body: request.body });
+      await reply.status(500).send({
+        success: false,
+        error: (error as Error).message
+      });
+    }
+  });
+
   tradingLogger.info('Live Trading API routes registered', {
-    endpoints: 20,
+    endpoints: 24,
     component: 'api'
   });
 }

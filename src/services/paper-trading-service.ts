@@ -491,6 +491,96 @@ export class PaperTradingService extends EventEmitter implements IPaperTradingSe
   }
 
   /**
+   * Reset paper trading account - matches JS backend
+   * Resets balance to initial or specified amount and clears all positions/orders
+   */
+  async resetAccount(accountId: string, newBalance?: number): Promise<PaperTradingAccount> {
+    try {
+      tradingLogger.info(`Resetting paper trading account ${accountId}`);
+
+      // Get current account
+      const account = await prisma.paperTradingAccount.findUnique({
+        where: { accountId }
+      });
+
+      if (!account) {
+        throw new Error('Account not found');
+      }
+
+      // Use new balance or reset to initial balance
+      const resetBalance = newBalance || account.initialBalance;
+
+      // Cancel all open orders
+      await prisma.paperOrder.updateMany({
+        where: {
+          accountId,
+          status: { in: ['NEW', 'PARTIALLY_FILLED'] }
+        },
+        data: {
+          status: 'CANCELED',
+          updatedAt: new Date()
+        }
+      });
+
+      // Close all open positions
+      await prisma.paperPosition.updateMany({
+        where: {
+          accountId,
+          status: 'OPEN'
+        },
+        data: {
+          status: 'CLOSED',
+          exitPrice: 0,
+          closedAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+
+      // Reset account balance and statistics
+      const updatedAccount = await prisma.paperTradingAccount.update({
+        where: { accountId },
+        data: {
+          balance: resetBalance,
+          initialBalance: resetBalance,
+          totalPnL: 0,
+          totalTrades: 0,
+          winningTrades: 0,
+          losingTrades: 0,
+          unrealizedPnL: 0,
+          realizedPnL: 0,
+          totalCommission: 0,
+          currentDrawdown: 0,
+          maxDrawdown: 0,
+          updatedAt: new Date()
+        },
+        include: {
+          positions: true,
+          orders: true
+        }
+      });
+
+      const result = this.mapDbAccountToAccount(updatedAccount);
+
+      // Update in-memory cache
+      this.accounts.set(accountId, result);
+
+      // Emit reset event
+      this.emit('accountReset', { accountId, newBalance: resetBalance });
+
+      // Broadcast via WebSocket
+      paperTradingWebSocket.broadcastAccountUpdate(accountId, result);
+
+      tradingLogger.info(`✅ Account ${accountId} reset successfully to balance: $${resetBalance}`);
+
+      return result;
+
+    } catch (error) {
+      tradingLogger.error('Error resetting account', error as Error);
+      throw error;
+    }
+  }
+
+  /**
    * Get user accounts
    */
   async getUserAccounts(userId: string, filters?: any): Promise<PaperTradingAccount[]> {

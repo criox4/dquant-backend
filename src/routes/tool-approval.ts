@@ -65,7 +65,7 @@ export default async function toolApprovalRoutes(app: FastifyInstance): Promise<
         data: pending
       });
     } catch (error) {
-      apiLogger.error('Failed to list pending tool calls:', error);
+      apiLogger.error('Failed to list pending tool calls', error as Error);
       await reply.status(500).send({
         success: false,
         error: (error as Error).message
@@ -132,7 +132,7 @@ export default async function toolApprovalRoutes(app: FastifyInstance): Promise<
         data: entry
       });
     } catch (error) {
-      apiLogger.error('Failed to approve tool call:', error);
+      apiLogger.error('Failed to approve tool call', error as Error);
       await reply.status(400).send({
         success: false,
         error: (error as Error).message
@@ -199,7 +199,7 @@ export default async function toolApprovalRoutes(app: FastifyInstance): Promise<
         data: entry
       });
     } catch (error) {
-      apiLogger.error('Failed to reject tool call:', error);
+      apiLogger.error('Failed to reject tool call', error as Error);
       await reply.status(400).send({
         success: false,
         error: (error as Error).message
@@ -270,7 +270,7 @@ export default async function toolApprovalRoutes(app: FastifyInstance): Promise<
         data: call
       });
     } catch (error) {
-      apiLogger.error('Failed to get tool call:', error);
+      apiLogger.error('Failed to get tool call', error as Error);
       await reply.status(500).send({
         success: false,
         error: (error as Error).message
@@ -303,7 +303,7 @@ export default async function toolApprovalRoutes(app: FastifyInstance): Promise<
         }
       }
     }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  }, async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       const stats = toolApprovalService.getStats();
 
@@ -312,7 +312,7 @@ export default async function toolApprovalRoutes(app: FastifyInstance): Promise<
         data: stats
       });
     } catch (error) {
-      apiLogger.error('Failed to get tool call stats:', error);
+      apiLogger.error('Failed to get tool call stats', error as Error);
       await reply.status(500).send({
         success: false,
         error: (error as Error).message
@@ -368,7 +368,7 @@ export default async function toolApprovalRoutes(app: FastifyInstance): Promise<
         }
       });
     } catch (error) {
-      apiLogger.error('Failed to cleanup tool calls:', error);
+      apiLogger.error('Failed to cleanup tool calls', error as Error);
       await reply.status(500).send({
         success: false,
         error: (error as Error).message

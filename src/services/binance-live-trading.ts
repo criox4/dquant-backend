@@ -36,8 +36,8 @@ import {
 } from '@/types/live-trading';
 
 export class BinanceLiveTradingService extends EventEmitter implements ILiveTradingService {
-  private exchange: ccxt.binance;
-  private wsExchange?: ccxt.binance;
+  private exchange: ccxt.Exchange;
+  private wsExchange?: ccxt.Exchange;
   private isConnectedFlag: boolean = false;
   private config: LiveTradingConfig;
   private watchedSymbols: Set<string> = new Set();
@@ -135,10 +135,10 @@ export class BinanceLiveTradingService extends EventEmitter implements ILiveTrad
 
     } catch (error) {
       tradingLogger.error('Failed to initialize Binance exchange', {
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
         component: 'live-trading'
       });
-      throw new ExchangeConnectionError('Failed to initialize Binance exchange', 'binance', error);
+      throw new ExchangeConnectionError('Failed to initialize Binance exchange', 'binance', error as Error);
     }
   }
 
@@ -177,17 +177,18 @@ export class BinanceLiveTradingService extends EventEmitter implements ILiveTrad
     } catch (error) {
       this.isConnectedFlag = false;
 
+      const errorMessage = error instanceof Error ? error.message : String(error);
       tradingLogger.error('Failed to connect to Binance', {
-        error: error.message,
+        error: errorMessage,
         component: 'live-trading'
       });
 
-      if (error.message.includes('Invalid API-key')) {
-        throw new ExchangeConnectionError('Invalid API credentials', 'binance', error);
-      } else if (error.message.includes('IP address')) {
-        throw new ExchangeConnectionError('IP address not whitelisted', 'binance', error);
+      if (errorMessage.includes('Invalid API-key')) {
+        throw new ExchangeConnectionError('Invalid API credentials', 'binance', error as Error);
+      } else if (errorMessage.includes('IP address')) {
+        throw new ExchangeConnectionError('IP address not whitelisted', 'binance', error as Error);
       } else {
-        throw new ExchangeConnectionError('Connection failed', 'binance', error);
+        throw new ExchangeConnectionError('Connection failed', 'binance', error as Error);
       }
     }
   }
@@ -207,7 +208,10 @@ export class BinanceLiveTradingService extends EventEmitter implements ILiveTrad
       this.emit('disconnected', { exchange: 'binance', timestamp: Date.now() });
 
     } catch (error) {
-      tradingLogger.error('Error during disconnect', { error: error.message, component: 'live-trading' });
+      tradingLogger.error('Error during disconnect', {
+        error: error instanceof Error ? error.message : String(error),
+        component: 'live-trading'
+      });
     }
   }
 
@@ -215,23 +219,16 @@ export class BinanceLiveTradingService extends EventEmitter implements ILiveTrad
     return this.isConnectedFlag;
   }
 
-  async getStatus(): Promise<ExchangeStatus> {
-    try {
-      const status = await this.exchange.fetchStatus();
-      return {
-        status: status.status === 'ok' ? 'ok' : 'error',
-        updated: status.updated || Date.now(),
-        eta: status.eta,
-        url: status.url,
-        info: status
-      };
-    } catch (error) {
-      return {
-        status: 'error',
-        updated: Date.now(),
-        info: { error: error.message }
-      };
-    }
+  getStatus(): ExchangeStatus {
+    return {
+      status: this.isConnectedFlag ? 'ok' : 'error',
+      updated: Date.now(),
+      info: {
+        exchange: 'binance',
+        connected: this.isConnectedFlag,
+        markets: this.exchange.markets ? Object.keys(this.exchange.markets).length : 0
+      }
+    };
   }
 
   // Account Management

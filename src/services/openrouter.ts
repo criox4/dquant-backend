@@ -45,6 +45,22 @@ export interface CompletionOptions {
   toolChoice?: 'auto' | 'none' | string;
 }
 
+export interface ChatCompletionResponse {
+  choices: Array<{
+    message: {
+      role: string;
+      content: string;
+      tool_calls?: ToolCall[];
+    };
+    finish_reason: string;
+  }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
 export interface StreamOptions extends CompletionOptions {
   onChunk?: (content: string, fullContent: string) => void;
   onComplete?: (fullContent: string) => void;
@@ -185,6 +201,70 @@ export class OpenRouterService {
 
       // Graceful fallback
       return this.generateFallbackResponse(messages, options);
+    }
+  }
+
+  /**
+   * Chat with tools returning raw response for orchestration
+   */
+  async chatWithToolsRaw(
+    messages: ChatMessage[],
+    options: CompletionOptions = {}
+  ): Promise<ChatCompletionResponse> {
+    const timer = performanceLogger.startTimer('openrouter_chat_with_tools_raw');
+
+    try {
+      if (!this.config.apiKey) {
+        throw new Error('OpenRouter API key not configured');
+      }
+
+      const model = this.resolveModel(options.model || this.config.defaultModel);
+      const payload: any = {
+        model,
+        messages,
+        temperature: options.temperature || 0.7,
+        max_tokens: options.maxTokens || 2000
+      };
+
+      // Add tools if provided and model supports it
+      if (options.tools && options.tools.length > 0 && this.supportsToolCalling(model)) {
+        payload.tools = options.tools;
+        payload.tool_choice = options.toolChoice || 'auto';
+        payload.temperature = 0.2; // Lower temperature for tool calling
+      }
+
+      // Add response format for compatible models
+      if (options.responseFormat === 'json' && this.supportsJsonMode(model)) {
+        payload.response_format = { type: 'json_object' };
+      }
+
+      apiLogger.debug('OpenRouter raw request', {
+        model,
+        messageCount: messages.length,
+        hasTools: !!options.tools,
+        temperature: payload.temperature
+      });
+
+      const response: AxiosResponse = await this.client.post('/chat/completions', payload);
+
+      performanceLogger.endTimer(timer);
+
+      apiLogger.info('OpenRouter raw chat completed', {
+        model,
+        choices: response.data.choices?.length || 0,
+        processingTime: Date.now() - timer.startTime
+      });
+
+      return response.data as ChatCompletionResponse;
+
+    } catch (error) {
+      performanceLogger.endTimer(timer);
+      apiLogger.error('OpenRouter raw chat failed', error as Error, {
+        model: options.model,
+        messageCount: messages.length
+      });
+
+      throw error;
     }
   }
 

@@ -503,12 +503,18 @@ async function backtestRoutes(app: FastifyInstance): Promise<void> {
           skip: offset,
           select: {
             id: true,
+            backtestId: true,
             strategyId: true,
             symbol: true,
             status: true,
-            results: true, // JSON field containing performance metrics
-            createdAt: true,
-            updatedAt: true,
+            totalReturn: true,
+            maxDrawdown: true,
+            sharpeRatio: true,
+            totalTrades: true,
+            winRate: true,
+            profitFactor: true,
+            metrics: true, // JSON field containing additional performance metrics
+            createdAt: true
           }
         }),
         app.prisma.backtestResult.count({
@@ -519,18 +525,19 @@ async function backtestRoutes(app: FastifyInstance): Promise<void> {
       // Transform results to match expected format
       const formattedBacktests = backtests.map(bt => ({
         id: bt.id,
-        backtestId: bt.id, // Use same ID for compatibility
+        backtestId: bt.backtestId,
         strategyId: bt.strategyId,
         symbol: bt.symbol,
         status: bt.status,
-        performance: bt.results ? {
-          totalReturnPercentage: (bt.results as any)?.totalReturn || 0,
-          maxDrawdownPercentage: (bt.results as any)?.maxDrawdown || 0,
-          sharpeRatio: (bt.results as any)?.sharpeRatio || 0,
-          totalTrades: (bt.results as any)?.totalTrades || 0
-        } : null,
-        createdAt: bt.createdAt.toISOString(),
-        updatedAt: bt.updatedAt.toISOString()
+        performance: {
+          totalReturnPercentage: Number(bt.totalReturn) || 0,
+          maxDrawdownPercentage: Number(bt.maxDrawdown) || 0,
+          sharpeRatio: bt.sharpeRatio ? Number(bt.sharpeRatio) : null,
+          totalTrades: bt.totalTrades || 0,
+          winRate: Number(bt.winRate) || 0,
+          profitFactor: bt.profitFactor ? Number(bt.profitFactor) : null
+        },
+        createdAt: bt.createdAt.toISOString()
       }));
 
       await reply.send({
